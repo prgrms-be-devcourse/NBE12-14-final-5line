@@ -8,6 +8,7 @@
 	frontend-dev \
 	frontend-lint \
 	frontend-typecheck \
+	frontend-test \
 	frontend-build
 
 help:
@@ -17,6 +18,7 @@ help:
 	@echo "make frontend-dev        Install dependencies if needed and start frontend"
 	@echo "make frontend-lint       Run frontend ESLint"
 	@echo "make frontend-typecheck  Check frontend TypeScript types"
+	@echo "make frontend-test       Run frontend tests once"
 	@echo "make frontend-build      Build frontend static files"
 
 # ---------------------------------------------------------------------------------
@@ -57,6 +59,9 @@ frontend-lint:
 
 frontend-typecheck:
 	npm --prefix frontend run typecheck
+
+frontend-test:
+	npm --prefix frontend run test
 
 frontend-build:
 	npm --prefix frontend run build

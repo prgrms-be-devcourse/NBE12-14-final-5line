@@ -86,6 +86,45 @@ python3 -m http.server 3001 --bind 127.0.0.1 --directory frontend/out
 - 브라우저 연결 도구를 사용할 수 없어 화면 모양은 직접 확인하지 못했다.
 - `npm audit`에서 린트 도구의 간접 의존성인 minimatch 관련 중간 등급 경고 7건이 확인됐다. 호환 범위 내 `npm audit fix`로는 해결되지 않았으며, 강제 버전 변경은 적용하지 않았다.
 
+## 테스트
+
+Vitest 5.1.0과 MSW 3.0.5를 개발 의존성으로 사용한다. 현재는 Node 환경의 API·로직 테스트만 구성했다. Backend·MySQL·개발 서버를 실행하지 않아도 테스트할 수 있다.
+
+저장소 루트에서 전체 테스트를 한 번 실행한다.
+
+```bash
+make frontend-test
+```
+
+`frontend/`에서 직접 실행할 수도 있다.
+
+```bash
+npm run test
+npm run test:watch
+```
+
+`test:watch`는 파일 변경 시 다시 실행하며 `Ctrl+C`로 종료한다. 의존성이 설치되어 있어야 하며 테스트 명령 자체는 자동 설치하지 않는다.
+
+```text
+frontend/
+├── vitest.config.mts       # Node 환경·setup 파일·@ 별칭 설정
+└── tests/
+    ├── setup.ts            # 파일 실행 전 MSW 시작, 테스트 후 응답 초기화, 파일 종료 후 해제
+    ├── mocks/
+    │   └── server.ts       # 테스트용 요청 가로채기 도구
+    └── msw.test.ts         # 성공·실패 응답 재현을 확인하는 최소 예시
+```
+
+MSW는 실제 포트를 여는 서버가 아니라 테스트 프로세스의 요청을 가로챈다. 각 테스트에서 `server.use()`로 필요한 응답을 등록한다. `afterEach`에서 응답을 초기화하므로 다른 테스트로 설정이 이어지지 않는다. 등록하지 않은 요청은 `onUnhandledFrame: 'error'`로 실패시켜 실제 네트워크 요청을 방지한다.
+
+공통 설정은 `tests/`에 두고, 실제 기능 테스트는 `src/`의 해당 코드 가까이에 `exampleApi.test.ts`처럼 추가한다. 테스트 함수와 검증 함수는 `vitest`에서 명시적으로 import하며, `it`에는 입력 상황과 검증 결과를 한국어로 작성한다.
+
+현재 두 테스트는 기본 `fetch`로 성공 응답의 상태·JSON, 실패 응답의 404 상태·`application/problem+json` Content-Type·본문을 읽는 것을 확인한다. 테스트 URL과 데이터는 도구 연결 확인용이며 실제 Backend 계약 검증이 아니다. Axios의 오류 변환이나 브라우저의 응답 처리는 아직 검증하지 않는다.
+
+Axios 공통 코드의 동작 테스트는 다음 작업에서 작성한다. 컴포넌트 테스트용 React Testing Library·DOM 환경과 실제 브라우저 흐름용 Playwright는 필요한 시점에 별도로 도입한다.
+
+참고: [Vitest 설정](https://vitest.dev/config/), [MSW Node 통합](https://mswjs.io/guides/integrations/node).
+
 ## 코드 스타일 규칙
 
 Next.js 권장 ESLint 설정에 `@stylistic/eslint-plugin` 5.10.0의 스타일 규칙을 추가한다.
