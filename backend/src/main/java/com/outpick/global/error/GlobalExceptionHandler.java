@@ -1,17 +1,28 @@
 package com.outpick.global.error;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
 import com.outpick.global.web.RequestIdFilter;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.validation.Errors;
+import org.springframework.validation.FieldError;
+import org.springframework.validation.method.ParameterErrors;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
@@ -24,6 +35,101 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final String INTERNAL_ERROR_MESSAGE = "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
+
+    /**
+     * 요청 DTO의 검증 실패를 필드 경로와 안내 문구로 변환합니다.
+     */
+    @Override
+    protected ResponseEntity<Object> handleMethodArgumentNotValid(
+            @NonNull MethodArgumentNotValidException exception,
+            @NonNull HttpHeaders headers,
+            @NonNull HttpStatusCode status,
+            @NonNull WebRequest request
+    ) {
+        return validationResponse(
+                exception,
+                headers,
+                request,
+                fieldErrors(exception.getBindingResult()));
+    }
+
+    /**
+     * 쿼리, 경로 파라미터와 메서드 수준에서 검증한 DTO의 오류를 같은 응답으로 변환합니다.<br />
+     * 반환값 검증 실패는 서버 구현의 문제이므로 기존 500 오류 처리로 전달합니다.
+     */
+    @Override
+    protected ResponseEntity<Object> handleHandlerMethodValidationException(
+            HandlerMethodValidationException exception,
+            @NonNull HttpHeaders headers,
+            @NonNull HttpStatusCode status,
+            @NonNull WebRequest request
+    ) {
+        if (exception.isForReturnValue()) {
+            return handleExceptionInternal(exception, null, headers, status, request);
+        }
+
+        List<FieldValidationError> errors = new ArrayList<>();
+
+        for (var result : exception.getParameterValidationResults()) {
+            if (result instanceof ParameterErrors beanErrors) {
+                errors.addAll(fieldErrors(beanErrors));
+            } else {
+                String field = parameterName(result.getMethodParameter());
+                for (var error : result.getResolvableErrors()) {
+                    errors.add(new FieldValidationError(field,
+                            Objects.requireNonNullElse(error.getDefaultMessage(), "요청 값을 확인해 주세요.")));
+                }
+            }
+        }
+        return validationResponse(exception, headers, request, errors);
+    }
+
+    /**
+     * 검증 오류에 400 상태와 fieldErrors를 지정하고, 공통 응답 생성 단계로 전달합니다.<br />
+     * 부모 메서드를 호출해 검증 전용 코드와 문구를 유지하면서 요청 ID도 추가합니다.
+     */
+    private ResponseEntity<Object> validationResponse(Exception exception, HttpHeaders headers,
+                                                      WebRequest request, List<FieldValidationError> errors) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "요청 값을 확인해 주세요.");
+        problem.setProperty("code", "VALIDATION_FAILED");
+        problem.setProperty("fieldErrors", errors);
+
+        log.warn("Request validation failed: errorCount={}", errors.size());
+        return super.handleExceptionInternal(exception, problem, headers, HttpStatus.BAD_REQUEST, request);
+    }
+
+    /**
+     * 중첩 필드·배열의 경로와 모든 안내 문구를 보존하고 사용자가 입력한 값은 제외합니다.
+     * 객체 전체에 대한 검증 오류는 해당 객체 이름을 위치로 사용합니다.
+     */
+    private List<FieldValidationError> fieldErrors(Errors errors) {
+        return errors.getAllErrors().stream()
+                .map(error -> new FieldValidationError(
+                        error instanceof FieldError fieldError ? fieldError.getField() : error.getObjectName(),
+                        Objects.requireNonNullElse(error.getDefaultMessage(), "요청 값을 확인해 주세요.")))
+                .toList();
+    }
+
+    /**
+     * Java 변수명보다 API에 공개한 쿼리, 경로 파라미터 이름을 우선 사용합니다.
+     */
+    private String parameterName(MethodParameter parameter) {
+        RequestParam query = parameter.getParameterAnnotation(RequestParam.class);
+        if (query != null && !query.name().isEmpty()) {
+            return query.name();
+        }
+        if (query != null && !query.value().isEmpty()) {
+            return query.value();
+        }
+        PathVariable path = parameter.getParameterAnnotation(PathVariable.class);
+        if (path != null && !path.name().isEmpty()) {
+            return path.name();
+        }
+        if (path != null && !path.value().isEmpty()) {
+            return path.value();
+        }
+        return Objects.requireNonNullElse(parameter.getParameterName(), "arg" + parameter.getParameterIndex());
+    }
 
     /**
      * BusinessException => ProblemDetail로 만들어서 응답합니다.

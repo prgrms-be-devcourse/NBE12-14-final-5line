@@ -154,6 +154,66 @@ Spring MVC 오류는 상태 이름을 코드로 사용합니다.
 
 이 MVC 테스트는 DB 없이 실행됩니다. 
 
-필드별 Validation 오류 응답은 사전 준비 계획의 다음 작업에서 추가합니다.
+## 요청 값 검증
+
+요청 DTO에는 Jakarta Validation 제약을 선언하고, 컨트롤러의 요청 본문에는 `@Valid`를 붙입니다.
+
+`GlobalExceptionHandler`가 검증 실패를 `400`·`VALIDATION_FAILED` 응답으로 변환합니다.
+
+```java
+public record CreatePlaceRequest(
+    @NotBlank(message = "장소 이름을 입력해 주세요.") String name
+) {}
+```
+
+컨트롤러에서는 `@Valid @RequestBody CreatePlaceRequest request`로 받습니다. 
+
+쿼리·경로 파라미터에는 `@Min`, `@Max` 등의 제약을 직접 선언합니다. 
+
+예를 들어 `@RequestParam("size") @Max(value = 50, message = "페이지 크기는 50 이하여야 합니다.") int pageSize`처럼 작성합니다. 
+
+오류에는 Java 변수명인 `pageSize` 대신 공개 파라미터명인 `size`를 담습니다.
+
+<br />
+
+컨트롤러 클래스에 `@Validated`를 추가하면 AOP 방식의 메서드 검증으로 처리 경로가 달라집니다. 
+
+현재 공통 처리기는 Spring MVC 내장 메서드 검증을 사용하므로 컨트롤러 클래스의 `@Validated` 없이 사용합니다.
+
+<br />
+
+검증 실패 응답은 기존 ProblemDetail 필드에 `fieldErrors`를 추가합니다.
+
+```json
+{
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "요청 값을 확인해 주세요.",
+  "instance": "/api/places",
+  "code": "VALIDATION_FAILED",
+  "requestId": "c187928f-5800-4d36-9f62-1ccf86445e17",
+  "fieldErrors": [
+    {
+      "field": "name",
+      "message": "장소 이름을 입력해 주세요."
+    }
+  ]
+}
+```
+
+- `field`는 요청 필드 경로나 쿼리·경로 파라미터 이름입니다.
+- 중첩 DTO와 배열은 `@Valid`로 함께 검증하면 `address.city`, `photos[0].url`처럼 위치를 반환합니다.
+- 같은 필드의 여러 제약이 실패하면 오류를 각각 담습니다. 배열 순서는 보장하지 않으며 프론트는 `field`로 입력란과 연결합니다.
+- 오류 객체에는 `field`와 `message`만 담습니다. 제약의 안내 문구는 클라이언트에 공개할 내용으로 작성하고 비밀번호 등 실제 입력값을 포함하지 않습니다.
+- JSON 문법 오류, 필수 파라미터 누락, 숫자 변환 실패는 기존 `BAD_REQUEST` 응답으로 처리합니다. 필드별 제약 검증은 `VALIDATION_FAILED`로 구분합니다.
+
+[`ValidationExceptionHandlerTests`](src/test/java/com/outpick/global/error/ValidationExceptionHandlerTests.java)에 DTO·파라미터 제약 선언과 정상·오류 요청 예시가 있습니다. 중첩 경로, 한 필드의 여러 오류, 비밀번호 입력값 제외, 반환값 검증 실패의 `500` 응답도 확인합니다.
+
+```bash
+# backend 디렉터리에서 실행
+./gradlew test --tests com.outpick.global.error.ValidationExceptionHandlerTests
+```
+
+[Spring MVC 공식 검증 문서](https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-validation.html)
 
 [Spring MVC 공식 오류 응답 문서](https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-ann-rest-exceptions.html)
