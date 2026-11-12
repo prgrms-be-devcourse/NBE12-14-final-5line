@@ -27,39 +27,54 @@ nvm use
 
 저장소 루트에서 다음 명령을 실행한다.
 
+Node.js와 npm은 먼저 설치하고 프로젝트 기준 버전을 선택한다.
+
 ```bash
-cd frontend
-node --version
-npm --version
-npm ci
-npm run dev
+cp frontend/.env.example frontend/.env.local
+make frontend-dev
 ```
 
-- `npm ci`: `package-lock.json`에 기록한 의존성을 `node_modules/`에 설치한다. 최초 설치 또는 잠금 파일 변경 후 실행한다.
-- `npm run dev`: 개발 서버를 시작한다. 브라우저에서 <http://localhost:3000>에 접속한다. 종료는 `Ctrl+C`를 사용한다.
+- `make frontend-dev`: 필요한 경우 `npm ci`로 패키지를 설치한 뒤 개발 서버를 시작한다. 브라우저에서 <http://localhost:3000>에 접속한다. 로그는 현재 터미널에 표시되고 `Ctrl+C`로 종료한다.
+- `node_modules/`에 성공한 설치 기록이 없거나 `package.json`·`package-lock.json`·Node.js/npm 버전이 바뀌면 다시 설치한다. 기존에 직접 설치했더라도 첫 실행에는 한 번 설치한다.
+- 설치에 실패하면 개발 서버를 실행하지 않는다. 설치 기록을 삭제하면 다음 실행에서 다시 설치한다.
+- Node.js 버전을 자동으로 설치하거나 변경하지 않는다.
 
 기본 페이지는 Backend나 MySQL을 실행하지 않아도 확인할 수 있다. `node_modules/`, `.next/`, `out/`은 Git에 포함하지 않는다.
 
+### 환경변수
+
+`frontend/.env.local`은 Next.js가 읽는 로컬 설정이며 Git에서 제외한다. 루트의 `.env`는 Docker Compose·Backend용이므로 Frontend 설정과 분리한다. 예제 복사는 최초 한 번만 하고, 기존 `.env.local`이 있다면 필요한 항목만 직접 추가한다.
+
+| 변수 | 로컬 예제 값 | 용도 |
+|---|---|---|
+| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | Backend API 서버의 기본 주소. `/api` 등의 요청 경로는 후속 Axios 구성에서 연결 |
+
+현재는 환경변수 예제만 준비했으며, 실제 API 요청에서 사용하는 코드는 Axios 작업에서 추가한다.
+
+`NEXT_PUBLIC_` 변수는 브라우저에 공개되므로 비밀번호·토큰을 넣지 않는다. 정적 배포에서는 빌드 시 값이 고정되므로 배포 환경의 API 주소를 설정한 뒤 빌드한다. 값 변경 후 개발 서버는 다시 시작하고, 배포 파일은 다시 빌드한다. 터미널에서 이미 설정한 동일한 이름의 환경변수는 `.env.local`보다 우선한다.
+
 ## 코드 검사 및 정적 빌드
 
-`frontend/`에서 실행한다.
+저장소 루트에서 실행한다. 이 명령들은 자동 설치를 하지 않으므로 최초에는 `make frontend-dev`로 설치를 마친 뒤 서버를 종료한다.
 
 ```bash
-npm run lint
-npm run typecheck
-npm run build
+make frontend-lint
+make frontend-typecheck
+make frontend-build
 ```
 
-- `lint`: ESLint로 코드를 검사한다.
-- `typecheck`: Next.js의 라우트 타입을 생성한 뒤 TypeScript 타입을 검사한다.
-- `build`: `output: "export"` 설정으로 배포용 HTML·CSS·JavaScript를 `out/`에 생성한다.
+- `frontend-lint`: ESLint로 코드를 검사한다.
+- `frontend-typecheck`: Next.js의 라우트 타입을 생성한 뒤 TypeScript 타입을 검사한다.
+- `frontend-build`: `output: "export"` 설정으로 배포용 HTML·CSS·JavaScript를 `frontend/out/`에 생성한다.
+
+직접 npm을 사용하려면 `frontend/`에서 `npm ci`, `npm run dev`, `npm run lint`, `npm run typecheck`, `npm run build`를 실행할 수 있다. 새 라이브러리를 추가하는 담당자는 `npm install 패키지명`을 실행하고 `package.json`과 `package-lock.json`을 함께 공유한다.
 
 `out/`은 정적 파일 서버나 CDN으로 제공한다. Next.js 실행 서버를 사용하는 `next start`는 이 구성에 사용하지 않는다.
 
 Python 3가 설치되어 있다면 빌드 결과를 다음과 같이 확인할 수 있다. 이 명령은 로컬 확인용이며 실제 배포 설정은 아니다.
 
 ```bash
-python3 -m http.server 3001 --bind 127.0.0.1 --directory out
+python3 -m http.server 3001 --bind 127.0.0.1 --directory frontend/out
 ```
 
 브라우저에서 <http://localhost:3001>에 접속하고, 확인 후 `Ctrl+C`로 종료한다. 기본 페이지의 정적 제공만 확인하며, 실제 배포 환경의 경로·API 연결 검증은 후속 작업에서 진행한다.
