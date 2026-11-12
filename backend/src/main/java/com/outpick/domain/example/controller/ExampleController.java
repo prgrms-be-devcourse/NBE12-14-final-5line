@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 요청을 검증하고 서비스에 전달한 뒤 DTO를 직접 반환하는 예시 컨트롤러입니다.
  */
 @RestController
-@RequestMapping("/api/examples")
+@RequestMapping("/examples")
 @RequiredArgsConstructor
 public class ExampleController {
 

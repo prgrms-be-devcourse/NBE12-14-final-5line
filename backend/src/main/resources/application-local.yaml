@@ -3,3 +3,8 @@ spring:
     url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE}
     username: ${MYSQL_USER:outpick}
     password: ${MYSQL_PASSWORD:outpick}
+
+app:
+  cors:
+    allowed-origins:
+      - http://localhost:3000
