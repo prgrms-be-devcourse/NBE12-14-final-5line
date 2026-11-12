@@ -13,9 +13,10 @@
 	frontend-preview
 
 help:
-	@echo "make compose-up     Start local MySQL and wait until ready"
-	@echo "make compose-down   Stop local MySQL (keep data)"
-	@echo "make compose-reset  Delete local DB data and restart (confirmation required)"
+	@echo "make compose-up          Start local MySQL and wait until ready"
+	@echo "make compose-down        Stop local MySQL (keep data)"
+	@echo "make compose-reset       Delete local DB data and restart (confirmation required)"
+	@echo "-----------------------"
 	@echo "make frontend-dev        Install dependencies if needed and start frontend"
 	@echo "make frontend-lint       Run frontend ESLint"
 	@echo "make frontend-typecheck  Check frontend TypeScript types"
