@@ -9,7 +9,8 @@
 	frontend-lint \
 	frontend-typecheck \
 	frontend-test \
-	frontend-build
+	frontend-build \
+	frontend-preview
 
 help:
 	@echo "make compose-up     Start local MySQL and wait until ready"
@@ -20,6 +21,7 @@ help:
 	@echo "make frontend-typecheck  Check frontend TypeScript types"
 	@echo "make frontend-test       Run frontend tests once"
 	@echo "make frontend-build      Build frontend static files"
+	@echo "make frontend-preview    Serve existing frontend build on localhost:3000 (Python 3 required)"
 
 # ---------------------------------------------------------------------------------
 #
@@ -41,7 +43,7 @@ compose-reset:
 	@printf 'Delete all local MySQL data? Type RESET: '; \
 	read -r answer; \
 	if [ "$$answer" != "RESET" ]; then echo "Cancelled."; exit 1; fi; \
-	docker compose down --volumes && $(MAKE) dev-up
+	docker compose down --volumes && $(MAKE) compose-up
 
 # ---------------------------------------------------------------------------------
 #
@@ -65,3 +67,8 @@ frontend-test:
 
 frontend-build:
 	npm --prefix frontend run build
+
+# 기존 빌드 파일만 제공합니다. 소스 변경 후에는 frontend-build를 먼저 실행합니다.
+frontend-preview:
+	@test -f frontend/out/index.html || { echo "빌드 결과가 없습니다. make frontend-build를 먼저 실행하세요."; exit 1; }
+	python3 -m http.server 3000 --bind 127.0.0.1 --directory frontend/out

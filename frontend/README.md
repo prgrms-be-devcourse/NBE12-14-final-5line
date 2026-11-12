@@ -2,7 +2,7 @@
 
 Next.js + TypeScript + Tailwind CSS 기반으로 정적 파일을 빌드한다. HTTP 통신은 Axios, 서버 상태 관리는 TanStack Query를 사용한다. 공유 클라이언트 상태 관리는 Zustand를 사용할 예정이다.
 
-현재는 개발 환경·레이아웃 예시와 TanStack Query 기반 조회 화면을 구성했다. Zustand는 후속 작업에서 연결한다.
+현재는 개발 환경·레이아웃 예시와 TanStack Query 기반 조회 화면을 구성했다. Zustand 설치·Store 구현은 공유할 UI 상태가 확정될 때까지 보류한다.
 
 ## 개발 환경
 
@@ -71,19 +71,46 @@ make frontend-build
 
 `out/`은 정적 파일 서버나 CDN으로 제공한다. Next.js 실행 서버를 사용하는 `next start`는 이 구성에 사용하지 않는다.
 
-Python 3가 설치되어 있다면 빌드 결과를 다음과 같이 확인할 수 있다. 이 명령은 로컬 확인용이며 실제 배포 설정은 아니다.
+Python 3가 설치되어 있다면 프로젝트 루트에서 기존 빌드 결과를 다음과 같이 제공한다. 이 명령은 로컬 확인용이며 실제 배포 설정은 아니다.
 
 ```bash
-python3 -m http.server 3001 --bind 127.0.0.1 --directory frontend/out
+make frontend-preview
 ```
 
-브라우저에서 <http://localhost:3001>에 접속하고, 확인 후 `Ctrl+C`로 종료한다. 기본 페이지의 정적 제공만 확인하며, 실제 배포 환경의 경로·API 연결 검증은 후속 작업에서 진행한다.
+`frontend-preview`는 자동 설치나 재빌드를 하지 않는다. `frontend/out/index.html`이 없으면 `make frontend-build`를 먼저 실행하라는 안내와 함께 종료한다. 소스나 API 주소를 변경했다면 다시 빌드한 뒤 확인한다.
+
+먼저 기존 개발 서버를 종료해 3000번 포트를 비운다. 브라우저에서 <http://localhost:3000>에 접속하고 확인 후 `Ctrl+C`로 정적 서버를 종료한다. 이 주소는 Backend local CORS 허용 출처와 같다. 다른 프로그램이 포트를 사용하면 임의로 종료하지 말고 사용 상태를 확인한다.
+
+### 정적 호스팅 경로와 검증
+
+`output: 'export'`와 `trailingSlash: true`를 사용한다. URL 끝에 `/`를 붙이고 경로별 디렉터리 안에 `index.html`을 생성한다.
+
+| URL | 생성 파일 |
+|---|---|
+| `/` | `out/index.html` |
+| `/minimal-example/` | `out/minimal-example/index.html` |
+| `/main-example/` | `out/main-example/index.html` |
+| `/admin-example/` | `out/admin-example/index.html` |
+
+정적 호스트는 디렉터리의 `index.html`을 제공해야 한다. CDN에서 같은 동작을 지원하는지 추후 인프라 작업에서 확인한다. 모든 경로를 루트 HTML로 돌리는 방식 대신 경로에 해당하는 HTML을 제공한다. 클라이언트 이동에 사용하는 `.txt` 파일과 `_next/` 자원도 필요하므로 `out/` 전체를 배포 대상으로 삼는다.
+
+API 주소는 빌드 시 브라우저 코드에 포함된다. 배포 대상 API 주소를 설정한 뒤 빌드하며, 이미 빌드한 파일의 API 주소를 바꾸려면 다시 빌드한다. 비밀정보는 `NEXT_PUBLIC_` 환경변수에 넣지 않는다.
+
+이번 로컬 검증에서 프로덕션 빌드, 네 페이지의 HTML 직접·반복 요청, JS·CSS 자원 11개의 HTTP 200, 빌드 코드의 로컬 API 주소 포함을 확인했다. 실제 Backend의 ID 1 성공·ID 2 업무 오류와 CORS 헤더도 확인했다. Next.js 서버는 사용하지 않았고 검증용 정적 서버는 종료했다.
+
+사용자가 로컬 정적 서버에서 다음 브라우저 동작도 정상임을 확인했다.
+
+- `/`의 링크로 세 예시 화면을 이동하고 뒤로 가기
+- 각 예시 URL로 직접 접속하고 새로고침
+- `/main-example/`에서 ID 1 성공·ID 2 오류 표시와 ‘다시 조회’
+
+AWS·CDN·Terraform 구축과 실제 배포는 이번 검증 범위에 포함하지 않는다.
 
 ### 초기 구성 검증 결과
 
 - Node.js 26.13.0, npm 11.20.0에서 ESLint·타입 검사·정적 빌드를 통과했다.
 - 개발 서버와 정적 파일 서버에서 기본 HTML·CSS·JavaScript의 HTTP 200 응답과 Tailwind 클래스 생성을 확인했다.
-- 브라우저 연결 도구를 사용할 수 없어 화면 모양은 직접 확인하지 못했다.
+- 초기에는 브라우저 도구를 사용할 수 없었으며, 이후 사용자가 개발 서버와 정적 빌드 화면의 동작을 직접 확인했다. 반응형 세부 디자인 검수는 별도다.
 - `npm audit`에서 린트 도구의 간접 의존성인 minimatch 관련 중간 등급 경고 7건이 확인됐다. 호환 범위 내 `npm audit fix`로는 해결되지 않았으며, 강제 버전 변경은 적용하지 않았다.
 
 ## 테스트
@@ -223,9 +250,9 @@ Backend와 MySQL을 준비하고 API 주소를 확인한 뒤 Frontend를 실행�
 
 이 화면은 실제 Backend를 호출한다. 테스트의 MSW는 개발 화면에 적용하지 않는다. 출처가 다른 서버를 브라우저에서 호출하려면 Backend의 CORS·쿠키 정책이 필요하다. Backend의 `local` 프로필은 `http://localhost:3000`을 허용한다. 다른 포트나 호스트를 사용한다면 Backend 허용 출처에도 명시해야 한다.
 
-### v1 API 경로 연동 확인
+### API 연동 검증 결과
 
-Frontend API와 관련 MSW 응답 경로를 `/api/v1/examples/...`로 맞춘 뒤 테스트 17개·린트·타입 검사를 통과했다. 실행 중인 Backend의 ID 1 성공 응답과 ID 2의 404 업무 오류, 두 응답의 `http://localhost:3000` CORS·자격 증명 허용 헤더를 확인했다. 브라우저 자동화 도구 연결이 불가능해 실제 화면에서의 최종 연동 확인은 수행하지 않았다.
+Frontend 테스트 17개·린트·타입 검사를 통과했다. 실행 중인 Backend의 ID 1 성공 응답과 ID 2의 404 업무 오류, 두 응답의 `http://localhost:3000` CORS·자격 증명 허용 헤더를 확인했다. 이후 사용자가 실제 브라우저에서 ID 1 성공·ID 2 오류 응답을 확인했고, Backend·Frontend 전체 테스트도 통과했다. 인증 쿠키 전송 검증은 별도다.
 
 ### 컴포넌트 테스트
 
@@ -372,13 +399,13 @@ Query Key는 각 Hook에 문자열로 흩어 놓지 않고 도메인의 `queries
 | 예시 URL | 레이아웃 |
 |---|---|
 | `/` | 예시 페이지로 이동하는 진입 화면 |
-| `/minimal-example` | 본문만 표시 |
-| `/main-example` | 일반 헤더 + 사이드바 |
-| `/admin-example` | 관리자 헤더 + 관리자 사이드바 |
+| `/minimal-example/` | 본문만 표시 |
+| `/main-example/` | 일반 헤더 + 사이드바 |
+| `/admin-example/` | 관리자 헤더 + 관리자 사이드바 |
 
-위 세 가지 레이아웃과 페이지 전용 컴포넌트를 최소한의 Tailwind CSS 스타일로 구현했다. 레이아웃 예시는 `domains/example/`에 넣지 않는다. 해당 도메인은 후속 HTTP 통신 예시로 사용한다. 관리자 예시는 화면 구성을 보여 주며 권한 검사는 포함하지 않는다.
+위 세 가지 레이아웃과 페이지 전용 컴포넌트를 최소한의 Tailwind CSS 스타일로 구현했다. 레이아웃 예시는 `domains/example/`에 넣지 않는다. 해당 도메인은 구현된 HTTP 통신·조회 Hook 예시로 사용한다. 관리자 예시는 화면 구성을 보여 주며 권한 검사는 포함하지 않는다.
 
-Axios 인스턴스와 Query Provider·Query Client·example Query Key는 구현했다. Zustand Store는 후속 작업에서 추가한다. `domains/place/`는 향후 실제 장소 기능의 배치 예시이며 이번 예시 구현 범위에 포함하지 않는다.
+Axios 인스턴스와 Query Provider·Query Client·example Query Key는 구현했다. Zustand Store는 공유할 UI 상태가 확정된 뒤 추가한다. `domains/place/`는 향후 실제 장소 기능의 배치 예시이며 이번 예시 구현 범위에 포함하지 않는다.
 
 ### 예시 확인과 새 페이지 추가
 
@@ -386,11 +413,11 @@ Axios 인스턴스와 Query Provider·Query Client·example Query Key는 구현�
 
 새 페이지는 원하는 레이아웃의 Route Group 아래에 `page.tsx`를 추가한다. 페이지 전용 컴포넌트는 해당 경로의 `_components/`에 두고, 상위 그룹의 `layout.tsx`가 적용하는 헤더·사이드바를 페이지에서 다시 작성하지 않는다.
 
-이번 구현은 ESLint·타입 검사를 통과했다. 개발 서버의 네 경로에서 HTTP 200, 레이아웃별 헤더·사이드바 포함 여부, 진입·복귀 링크를 HTML로 확인했다. 브라우저에서 링크 클릭·뒤로 가기·반응형 화면의 시각적 확인은 수행하지 않았다. 이번 변경의 정적 빌드 검증은 사용자 요청에 따라 생략했다.
+이번 구현은 ESLint·타입 검사를 통과했다. 개발 서버의 네 경로에서 HTTP 200, 레이아웃별 헤더·사이드바 포함 여부, 진입·복귀 링크를 HTML로 확인했다. 레이아웃 작업 당시 정적 빌드는 생략했지만, 이후 정적 배포 검증에서 빌드와 사용자 브라우저의 링크 이동·뒤로 가기·새로고침·API 동작 확인을 마쳤다. 반응형 세부 디자인 검수는 별도다.
 
 ### 장소 상세 URL과 메타정보
 
-장소 상세 URL은 `/places/detail?id=123`으로 정한다. 정적 상세 페이지를 제공하고 브라우저에서 `id`를 읽어 API로 해당 장소를 조회하는 방향이다. 실제 장소 페이지와 API 연결은 담당 기능 개발에서 구현한다.
+장소 상세 URL은 `/places/detail/?id=123`으로 정한다. 정적 상세 페이지를 제공하고 브라우저에서 `id`를 읽어 API로 해당 장소를 조회하는 방향이다. 실제 장소 페이지와 API 연결은 담당 기능 개발에서 구현한다.
 
 OUTPICK 공통 OG 태그를 제공하는 방향으로 두고, 장소별 OG 태그·검색엔진 노출 요구사항은 주요 기능 개발 후 팀과 논의한다. 장소별 정적 HTML 생성이나 Backend 공유 URL은 그때 검토한다.
 

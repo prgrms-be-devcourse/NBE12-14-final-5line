@@ -11,7 +11,7 @@ OUTPICK은 스포츠·액티비티 장소 탐색 서비스입니다.
 ## 저장소 구조
 
 - `backend/`: Java 25, Spring Boot 4.1.2, Gradle Kotlin DSL
-- `frontend/`: React 기반 정적 웹 애플리케이션 (프레임워크 미확정)
+- `frontend/`: Next.js + TypeScript + Tailwind CSS 기반 정적 웹 애플리케이션
 - `infra/`: Terraform 기반 AWS 인프라
 - `agents/`: 프로젝트 계획 및 작업별 참고 문서
 

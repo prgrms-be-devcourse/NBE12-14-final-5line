@@ -22,8 +22,6 @@ MySQL과 Spring Boot 실행 절차는 [프로젝트 README](../README.md)를 참
 
 Swagger UI가 안내하는 도메인 API도 같은 접두사를 사용합니다. Swagger 문서(`/v3/api-docs`), Swagger UI, Actuator는 도메인 컨트롤러가 아니므로 기존 경로를 유지합니다. Prometheus도 활성화할 경우 `/actuator/prometheus`를 사용합니다. 이번 작업에서 지표 공개 설정을 추가한 것은 아닙니다.
 
-기존 `/api/examples/...` 경로는 더 이상 제공하지 않습니다. Frontend의 API 경로·MSW 테스트 수정은 별도 작업이며, 수정 전에는 기존 Frontend 요청이 404가 될 수 있습니다.
-
 ## 환경별 CORS 정책
 
 [`CorsProperties`](src/main/java/com/outpick/global/config/CorsProperties.java)가 `app.cors.allowed-origins`를 읽고 `WebConfig`가 `/api/v1/**`에 적용합니다. 허용 출처는 현재 `application-local.yaml`에만 등록했습니다.
@@ -59,7 +57,7 @@ curl -i -X OPTIONS http://localhost:8080/api/v1/examples/preview \
   -H 'Access-Control-Request-Headers: content-type,authorization'
 ```
 
-curl은 브라우저처럼 CORS를 강제하지 않습니다. 이 요청은 서버가 반환하는 헤더 확인용입니다. 실제 Frontend 연동은 요청 경로를 변경한 뒤 별도로 확인합니다.
+curl은 브라우저처럼 CORS를 강제하지 않습니다. 이 요청은 서버가 반환하는 헤더 확인용입니다. 사용자가 Frontend에서 ID 1 성공·ID 2 업무 오류 응답을 확인했습니다. 인증 쿠키 전송 검증은 별도입니다.
 
 [`WebConfigTests`](src/test/java/com/outpick/global/config/WebConfigTests.java)와 [`WebConfigWithoutOriginsTests`](src/test/java/com/outpick/global/config/WebConfigWithoutOriginsTests.java)는 실제 MVC에서 허용·거부 출처, 오류 응답, 사전 요청과 v1 경로를 검증합니다. [`BackendApplicationTests`](src/test/java/com/outpick/BackendApplicationTests.java)는 Testcontainers MySQL과 전체 애플리케이션에서 OpenAPI·Swagger·Actuator 경로도 확인합니다.
 

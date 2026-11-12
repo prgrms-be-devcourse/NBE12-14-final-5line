@@ -14,7 +14,7 @@ Java 25, Docker Compose, Make가 필요합니다. Docker를 먼저 실행합니�
 3. MySQL을 시작합니다.
 
    ```bash
-   make dev-up
+   make compose-up
    ```
 
 MySQL은 `127.0.0.1:3306`에 노출됩니다. 포트가 사용 중이면 `.env`의 `MYSQL_PORT`를 변경합니다. 데이터는 Compose 프로젝트의 `mysql-data` named volume에 저장됩니다.
@@ -25,7 +25,7 @@ profile을 지정하지 않으면 `local`이 적용됩니다. 기본 Java가 다
 
 ### IntelliJ에서 실행
 
-1. 위의 MySQL 실행 절차에 따라 `.env`를 작성하고, 프로젝트 루트에서 `make dev-up`을 실행합니다.
+1. 위의 MySQL 실행 절차에 따라 `.env`를 작성하고, 프로젝트 루트에서 `make compose-up`을 실행합니다.
 2. `File → Project Structure`에서 Project SDK와 language level을 Java 25로 맞춥니다. Modules의 language level도 25 또는 프로젝트 설정을 상속하도록 지정합니다.
 3. `backend/src/main/java/com/outpick/BackendApplication.java`를 열고 `main` 메서드 옆 실행 버튼으로 실행 구성을 만듭니다. 환경 변수 등록 전에는 DB 연결 오류가 발생할 수 있습니다.
 4. `Run → Edit Configurations`에서 `BackendApplication`을 선택합니다.
@@ -75,20 +75,24 @@ cd backend
 ./gradlew test
 ```
 
-테스트는 Testcontainers가 별도 MySQL 컨테이너를 생성하고 접속 정보를 주입합니다. 기본 `local` profile이 적용되어도 컨테이너 접속 정보가 DataSource 설정보다 우선하므로 `.env`와 `make dev-up`은 필요하지 않습니다. 개발 DB와 볼륨을 공유하지 않으며 테스트 종료 후 컨테이너는 제거됩니다. 첫 실행에는 이미지 다운로드가 필요합니다.
+테스트는 Testcontainers가 별도 MySQL 컨테이너를 생성하고 접속 정보를 주입합니다. 기본 `local` profile이 적용되어도 컨테이너 접속 정보가 DataSource 설정보다 우선하므로 `.env`와 `make compose-up`은 필요하지 않습니다. 개발 DB와 볼륨을 공유하지 않으며 테스트 종료 후 컨테이너는 제거됩니다. 첫 실행에는 이미지 다운로드가 필요합니다.
 
 ## MySQL 종료 및 초기화
 
 ```bash
-make dev-down
+make compose-down
 ```
 
 종료 후에도 데이터는 유지됩니다. 기존 볼륨이 있으면 `.env`의 DB 이름·사용자·비밀번호를 변경해도 MySQL 초기 설정에 반영되지 않습니다.
 
-**다음 명령은 로컬 DB 데이터를 모두 삭제한 뒤 다시 시작합니다.** 확인 문구에 `RESET`을 입력해야 실행됩니다.
+초기화 명령은 로컬 DB 데이터를 모두 삭제하며, 확인 문구에 `RESET`을 입력해야 실행됩니다.
 
 ```bash
-make dev-reset
+make compose-reset
 ```
 
 이 Compose 구성은 로컬 개발용입니다. 운영 DB와 비밀 정보 관리는 배포 구조를 정할 때 별도로 구성합니다.
+
+## Frontend 개발 환경
+
+Next.js·TypeScript 기반 Frontend의 Node 버전, 실행·검사·테스트·정적 빌드 방법은 [Frontend README](frontend/README.md)를 참고합니다. 공통 기반과 로컬 브라우저 검증을 마쳤으며, Zustand는 공유할 UI 상태가 확정될 때까지 보류합니다.
