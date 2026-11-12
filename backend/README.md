@@ -217,3 +217,75 @@ public record CreatePlaceRequest(
 [Spring MVC 공식 검증 문서](https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-validation.html)
 
 [Spring MVC 공식 오류 응답 문서](https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-ann-rest-exceptions.html)
+
+## 예시 도메인과 패키지 구조
+
+`com.outpick.domain.example`은 도메인 안에 계층별 패키지를 두는 구조와 공통 기능 사용법을 보여 줍니다.
+
+```text
+domain/example/
+├── controller/ExampleController.java
+├── service/ExampleService.java
+├── dto/
+│   ├── ExampleCreateRequest.java
+│   └── ExampleResponse.java
+└── exception/ExampleErrorCode.java
+```
+
+| 패키지 | 예시에서의 역할 |
+|---|---|
+| `controller` | HTTP 요청을 받고 입력 검증 후 서비스를 호출해 응답 DTO 반환 |
+| `service` | 고정 예시 조회와 미리보기 처리, 상황에 맞는 도메인 예외 발생 |
+| `dto` | 입력 필드 제약과 응답 데이터 정의 |
+| `exception` | 도메인별 오류 목록과 공통 `ErrorCode` record 보관 |
+
+`global`에는 여러 도메인이 사용하는 예외 처리·검증 오류 응답·요청 ID 필터가 있습니다. 예시 도메인은 이 공통 코드를 사용합니다.
+
+### 예시 API 호출
+
+앱을 실행한 뒤 다음 API를 호출하거나 Swagger UI에서 실행할 수 있습니다. 예시 서비스는 DB 접근 없이 고정 데이터와 입력값으로 응답을 만듭니다. 앱 기동에는 기존 MySQL 실행 설정이 필요합니다.
+
+| API | 동작 |
+|---|---|
+| `GET /api/examples/1` | 고정 예시를 `200`과 DTO 본문으로 반환 |
+| `GET /api/examples/2` | 서비스에서 `BusinessException` 발생, 공통 처리기가 `404`·`EXAMPLE_NOT_FOUND` 반환 |
+| `GET /api/examples/0` | 양수 ID 제약에 실패해 `400`·`VALIDATION_FAILED`와 `id` 오류 반환 |
+| `POST /api/examples/preview` | 입력 필드를 검증하고 미리보기 DTO를 `200`으로 반환 |
+
+미리보기는 데이터를 저장하지 않으므로 이후 조회 결과는 고정 예시를 유지합니다. 생성 요청 DTO의 필드 제약을 확인할 수 있는 API입니다.
+
+```bash
+# 정상 조회
+curl -i http://localhost:8080/api/examples/1
+
+# 도메인 오류
+curl -i http://localhost:8080/api/examples/2
+
+# 정상 미리보기
+curl -i http://localhost:8080/api/examples/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"예시 액티비티","participantCount":3}'
+
+# 필수 필드 오류: 이름 공백, 인원수 누락
+curl -i http://localhost:8080/api/examples/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"name":" "}'
+```
+
+정상 조회와 미리보기의 응답 본문은 다음 형식입니다.
+
+```json
+{
+  "name": "예시 액티비티",
+  "participantCount": 3
+}
+```
+
+`ExampleCreateRequest`는 이름의 `@NotBlank`·`@Size(max = 30)`과 인원수의 `@NotNull`·`@Min(1)`·`@Max(10)`을 보여 줍니다. 인원수는 `Integer`여서 누락을 `null`로 받아 필수값 제약으로 처리할 수 있습니다. 필드 오류는 기존 `fieldErrors` 응답으로 반환합니다.
+
+[`ExampleControllerTests`](src/test/java/com/outpick/domain/example/ExampleControllerTests.java)는 실제 컨트롤러와 서비스를 연결하고 공통 예외 처리기·필터를 사용합니다. DB 없이 예시 API의 정상 응답, 범위의 경계, 필수값·길이·숫자 범위 검증, 도메인 오류를 확인합니다.
+
+```bash
+# backend 디렉터리에서 실행
+./gradlew test --tests com.outpick.domain.example.ExampleControllerTests
+```
