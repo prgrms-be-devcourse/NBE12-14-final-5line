@@ -1,5 +1,16 @@
+### Environment files ###
+.env
+.env.*
+!.env.example
+
 ### Mac OS ###
 .DS_Store
 
-### IDE: IntelliJ ###
+### IDE - IntelliJ ###
 .idea
+
+### IDE - VSCode ###
+.vscode
+
+### AI Agents ###
+agents
