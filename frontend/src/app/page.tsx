@@ -1,5 +1,11 @@
 /** 초기 실행과 Tailwind CSS 적용을 확인하기 위한 기본 페이지입니다. */
 export default function Home() {
+  // ESLint 강제 해제 반영 여부 테스트
+  // const trackedVar: string = '123';
+
+  // eslint-disable-next-line
+  const untrackedVar: string = "123";
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-slate-900">
       <section className="max-w-xl rounded-2xl border border-slate-200 bg-white p-8">
