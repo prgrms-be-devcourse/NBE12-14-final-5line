@@ -9,7 +9,7 @@ import { server } from '../../../../../tests/mocks/server';
 import QueryProvider from '@/app/_providers/QueryProvider';
 import MainExampleContent from './MainExampleContent';
 
-const url = 'https://api.outpick.test/api/examples';
+const url = 'https://api.outpick.test/api/v1/examples';
 
 /** 실제 Provider·조회 Hook·Axios를 함께 실행해 화면에서 관찰하는 동작을 검증합니다. */
 function renderExample() {

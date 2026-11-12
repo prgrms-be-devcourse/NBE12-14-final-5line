@@ -145,9 +145,11 @@ src/
         └── example.type.ts
 ```
 
-- `getExample({ id, signal })`: `GET /api/examples/{id}`로 조회한다. Backend 예시는 ID 1에서 성공하고 다른 양수 ID에서 업무 오류를 반환한다. 선택적인 `signal`로 요청을 취소할 수 있다.
-- `previewExample({ name, participantCount })`: `POST /api/examples/preview`로 미리보기를 요청한다. 저장하지 않으며 이름·인원수의 Backend Validation을 적용한다.
+- `getExample({ id, signal })`: `GET /api/v1/examples/{id}`로 조회한다. Backend 예시는 ID 1에서 성공하고 다른 양수 ID에서 업무 오류를 반환한다. 선택적인 `signal`로 요청을 취소할 수 있다.
+- `previewExample({ name, participantCount })`: `POST /api/v1/examples/preview`로 미리보기를 요청한다. 저장하지 않으며 이름·인원수의 Backend Validation을 적용한다.
 - 두 함수는 `{ name, participantCount }`를 반환하고 `data` 래퍼를 추가하지 않는다. TypeScript DTO 타입은 Backend 계약을 표현하며 성공 JSON의 런타임 검증 기능은 아니다.
+
+Backend의 공통 접두사에 맞춰 도메인 API 함수는 `/api/v1/...` 경로를 사용한다. `NEXT_PUBLIC_API_BASE_URL`에는 `http://localhost:8080`처럼 서버 기본 주소만 설정하고 `/api/v1`을 중복으로 넣지 않는다.
 
 ### 공통 오류 사용
 
@@ -219,7 +221,11 @@ src/
 
 Backend와 MySQL을 준비하고 API 주소를 확인한 뒤 Frontend를 실행한다. `/main-example`에서 ID 1은 성공 응답, ID 2는 업무 오류를 조회한다. 로딩·성공·오류 표시와 ‘다시 조회’를 확인한다. 재조회에 실패해도 기존 데이터가 있다면 안내와 함께 유지한다.
 
-이 화면은 실제 Backend를 호출한다. 테스트의 MSW는 개발 화면에 적용하지 않는다. 출처가 다른 서버를 브라우저에서 호출하려면 Backend의 CORS·쿠키 정책이 필요하다. 이번 작업에서는 Backend 설정을 변경하지 않았으므로 정책이 준비되지 않았다면 연결 실패가 표시될 수 있다.
+이 화면은 실제 Backend를 호출한다. 테스트의 MSW는 개발 화면에 적용하지 않는다. 출처가 다른 서버를 브라우저에서 호출하려면 Backend의 CORS·쿠키 정책이 필요하다. Backend의 `local` 프로필은 `http://localhost:3000`을 허용한다. 다른 포트나 호스트를 사용한다면 Backend 허용 출처에도 명시해야 한다.
+
+### v1 API 경로 연동 확인
+
+Frontend API와 관련 MSW 응답 경로를 `/api/v1/examples/...`로 맞춘 뒤 테스트 17개·린트·타입 검사를 통과했다. 실행 중인 Backend의 ID 1 성공 응답과 ID 2의 404 업무 오류, 두 응답의 `http://localhost:3000` CORS·자격 증명 허용 헤더를 확인했다. 브라우저 자동화 도구 연결이 불가능해 실제 화면에서의 최종 연동 확인은 수행하지 않았다.
 
 ### 컴포넌트 테스트
 

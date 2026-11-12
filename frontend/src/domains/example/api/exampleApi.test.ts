@@ -8,14 +8,14 @@ const baseURL = 'https://api.outpick.test';
 describe('예시 도메인 API', () => {
   it('조회 요청의 ID를 경로에 전달하고 성공 DTO를 그대로 반환한다', async () => {
     const body = { name: '예시 액티비티', participantCount: 3 };
-    server.use(http.get(`${baseURL}/api/examples/1`, () => HttpResponse.json(body)));
+    server.use(http.get(`${baseURL}/api/v1/examples/1`, () => HttpResponse.json(body)));
 
     expect(await getExample({ id: 1 })).toEqual(body);
   });
 
   it('미리보기 입력을 POST 본문으로 보내고 응답 DTO를 반환한다', async () => {
     const input = { name: '농구', participantCount: 5 };
-    server.use(http.post(`${baseURL}/api/examples/preview`, async ({ request }) => {
+    server.use(http.post(`${baseURL}/api/v1/examples/preview`, async ({ request }) => {
       expect(await request.json()).toEqual(input);
       return HttpResponse.json(input);
     }));
@@ -24,12 +24,13 @@ describe('예시 도메인 API', () => {
   });
 
   it('업무 오류의 HTTP 상태·설명·코드·요청 ID를 공통 오류에 유지한다', async () => {
-    server.use(http.get(`${baseURL}/api/examples/2`, () => HttpResponse.json({
+    server.use(http.get(`${baseURL}/api/v1/examples/2`, () => HttpResponse.json({
       type: 'about:blank',
       title: 'Not Found',
       status: 404,
       detail: '예시를 찾을 수 없습니다.',
       code: 'EXAMPLE_NOT_FOUND',
+      instance: '/api/v1/examples/2',
       requestId: 'example-request-id',
     }, {
       status: 404,
@@ -54,10 +55,11 @@ describe('예시 도메인 API', () => {
       { field: 'name', message: '이름을 입력해 주세요.' },
       { field: 'participantCount', message: '인원수는 1명 이상이어야 합니다.' },
     ];
-    server.use(http.post(`${baseURL}/api/examples/preview`, () => HttpResponse.json({
+    server.use(http.post(`${baseURL}/api/v1/examples/preview`, () => HttpResponse.json({
       status: 400,
       detail: '입력값을 확인해 주세요.',
       code: 'VALIDATION_FAILED',
+      instance: '/api/v1/examples/preview',
       requestId: 'validation-request-id',
       fieldErrors,
     }, {
