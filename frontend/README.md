@@ -1,8 +1,8 @@
 # OUTPICK Frontend
 
-Next.js + TypeScript + Tailwind CSS 기반으로 정적 파일을 빌드한다. HTTP 통신은 Axios를 사용하고, 서버 상태 관리는 TanStack Query, 공유 클라이언트 상태 관리는 Zustand를 사용할 예정이다.
+Next.js + TypeScript + Tailwind CSS 기반으로 정적 파일을 빌드한다. HTTP 통신은 Axios, 서버 상태 관리는 TanStack Query를 사용한다. 공유 클라이언트 상태 관리는 Zustand를 사용할 예정이다.
 
-현재는 개발 환경·레이아웃 예시와 Axios 기반 example API 함수를 구성했다. 화면에서 API를 호출하는 예시와 TanStack Query·Zustand는 후속 작업에서 연결한다.
+현재는 개발 환경·레이아웃 예시와 TanStack Query 기반 조회 화면을 구성했다. Zustand는 후속 작업에서 연결한다.
 
 ## 개발 환경
 
@@ -47,7 +47,7 @@ make frontend-dev
 
 | 변수 | 로컬 예제 값 | 용도 |
 |---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | Backend API 서버의 기본 주소. `/api` 등의 요청 경로는 후속 Axios 구성에서 연결 |
+| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | Backend API 서버의 기본 주소. 도메인 API 함수가 `/api` 등의 요청 경로를 추가 |
 
 공통 Axios 인스턴스가 이 값을 읽는다. API 모듈을 사용하는 실행·빌드 환경에는 이 변수가 필요하며 누락되거나 유효한 HTTP(S) URL이 아니면 초기화 시 실패한다.
 
@@ -88,7 +88,7 @@ python3 -m http.server 3001 --bind 127.0.0.1 --directory frontend/out
 
 ## 테스트
 
-Vitest 5.1.0과 MSW 3.0.5를 개발 의존성으로 사용한다. 현재는 Node 환경의 API·로직 테스트만 구성했다. Backend·MySQL·개발 서버를 실행하지 않아도 테스트할 수 있다.
+Vitest 5.1.0과 MSW 3.0.5를 개발 의존성으로 사용한다. API·로직 테스트는 Node 환경, 컴포넌트 테스트는 jsdom 환경에서 실행한다. Backend·MySQL·개발 서버를 실행하지 않아도 테스트할 수 있다.
 
 저장소 루트에서 전체 테스트를 한 번 실행한다.
 
@@ -121,7 +121,7 @@ MSW는 실제 포트를 여는 서버가 아니라 테스트 프로세스의 요
 
 현재 두 테스트는 기본 `fetch`로 성공 응답의 상태·JSON, 실패 응답의 404 상태·`application/problem+json` Content-Type·본문을 읽는 것을 확인한다. 테스트 URL과 데이터는 도구 연결 확인용이며 실제 Backend 계약 검증이 아니다. 이 연결 테스트의 `fetch`는 의도적으로 유지한다. 실제 API 함수는 공통 Axios 인스턴스를 사용하며 별도 테스트에서 오류 변환을 확인한다. 브라우저의 응답 처리는 이 Node 테스트로 검증하지 않는다.
 
-Axios 공통 코드와 example API 테스트는 각 구현 파일 가까이에 작성했다. 컴포넌트 테스트용 React Testing Library·DOM 환경과 실제 브라우저 흐름용 Playwright는 필요한 시점에 별도로 도입한다.
+Axios 공통 코드와 example API 테스트는 각 구현 파일 가까이에 작성했다. React Testing Library·user-event·jsdom으로 컴포넌트 동작도 검증한다. 실제 브라우저 흐름용 Playwright는 추후 도입한다.
 
 참고: [Vitest 설정](https://vitest.dev/config/), [MSW Node 통합](https://mswjs.io/guides/integrations/node).
 
@@ -182,9 +182,54 @@ ProblemDetail이 아닌 JSON·HTML 응답이나 형식이 다른 필드는 안�
 
 ### 테스트 범위
 
-`vitest.config.mts`는 테스트 전용 API 주소를 지정하므로 개인 `.env.local`이나 실제 Backend에 의존하지 않는다. MSW로 example 조회·미리보기 성공, 업무·Validation 오류, 비표준 응답, 네트워크 실패·타임아웃·취소를 재현한다. 실제 Backend·브라우저·쿠키 전송·CORS 연결 검증은 포함하지 않는다. 화면과 TanStack Query 연결은 다음 작업에서 진행한다.
+`vitest.config.mts`는 테스트 전용 API 주소를 지정하므로 개인 `.env.local`이나 실제 Backend에 의존하지 않는다. MSW로 example 조회·미리보기 성공, 업무·Validation 오류, 비표준 응답, 네트워크 실패·타임아웃·취소를 재현한다. 실제 Backend·브라우저·쿠키 전송·CORS 연결 검증은 포함하지 않는다. 화면과 TanStack Query 연결은 아래 서버 상태 관리 절에서 설명한다.
 
 참고: [Axios 오류 처리](https://axios-http.com/docs/handling_errors), [Axios 요청 설정](https://axios-http.com/docs/req_config).
+
+## 서버 상태 관리와 조회 화면
+
+TanStack Query 5.107.1로 서버 응답·로딩·오류·캐시를 관리한다. 최상위 레이아웃에서 `QueryProvider`를 연결한다. 브라우저에서는 같은 Query Client를 재사용하고 서버 렌더링에서는 새로 생성해 요청 간 캐시 공유를 피한다. API 조회는 브라우저에서 실행하며 빌드 시 미리 조회하지 않는다.
+
+```text
+src/
+├── app/
+│   ├── _providers/QueryProvider.tsx
+│   └── (main)/main-example/_components/
+│       ├── MainExampleContent.tsx
+│       └── MainExampleContent.test.tsx
+├── domains/example/
+│   ├── queries/exampleQueryKeys.ts
+│   └── hooks/useExampleQuery.ts
+└── shared/lib/query/queryClient.ts
+```
+
+조회 흐름은 `MainExampleContent → useExampleQuery → getExample → apiClient`다. Query Key는 `['examples', 'detail', id]`로 ID별 캐시를 구분하며, 취소 신호는 Axios까지 전달한다.
+
+| 공통 정책 | 값 |
+|---|---|
+| `staleTime` | 30초 동안 데이터를 최신으로 취급 |
+| `gcTime` | 사용하지 않는 캐시를 5분 뒤 제거 |
+| `retry` | `false`. 실패 자동 재시도 안 함 |
+| `refetchOnWindowFocus` | `false`. 창 포커스 복귀 시 자동 재조회 안 함 |
+| `refetchOnReconnect` | `true`. 재연결 시 오래된 활성 조회 재조회 |
+
+개별 Hook에서 정책을 재정의할 수 있다. 최신 캐시가 있어도 사용자가 누르는 ‘다시 조회’는 재요청한다. Mutation·데이터 변경 후 캐시 무효화 예시는 이번 범위에 포함하지 않는다.
+
+### 로컬 화면 확인
+
+Backend와 MySQL을 준비하고 API 주소를 확인한 뒤 Frontend를 실행한다. `/main-example`에서 ID 1은 성공 응답, ID 2는 업무 오류를 조회한다. 로딩·성공·오류 표시와 ‘다시 조회’를 확인한다. 재조회에 실패해도 기존 데이터가 있다면 안내와 함께 유지한다.
+
+이 화면은 실제 Backend를 호출한다. 테스트의 MSW는 개발 화면에 적용하지 않는다. 출처가 다른 서버를 브라우저에서 호출하려면 Backend의 CORS·쿠키 정책이 필요하다. 이번 작업에서는 Backend 설정을 변경하지 않았으므로 정책이 준비되지 않았다면 연결 실패가 표시될 수 있다.
+
+### 컴포넌트 테스트
+
+React Testing Library 16.3.3·user-event 14.6.9·jsdom 31.0.0을 사용한다. 컴포넌트 테스트 첫 줄에 `// @vitest-environment jsdom`을 선언하고 `tests/setup-dom.ts`를 import한다. 기존 API 테스트는 Node 환경을 유지한다.
+
+실제 QueryProvider로 화면을 감싸고 MSW로 응답을 재현한다. `setup-dom.ts`는 테스트마다 화면을 해제하고 Query 캐시·타이머를 정리한다. jsdom 주소는 모의 API와 같은 `https://api.outpick.test`로 지정했다. 실제 브라우저의 CORS·쿠키 정책은 검증하지 않는다.
+
+화면 테스트는 로딩 후 성공 표시, 오류 후 수동 재조회, 성공 데이터 갱신, ID별 캐시 구분과 최신 캐시 재사용을 검증한다. 버튼 클릭과 선택 입력은 user-event로 재현한다. 실제 브라우저 렌더링·뒤로 가기·네트워크 재연결 검증은 포함하지 않는다.
+
+참고: [TanStack Query Provider 구성](https://tanstack.com/query/latest/docs/framework/react/guides/advanced-ssr), [React Testing Library API](https://testing-library.com/docs/react-testing-library/api/).
 
 ## 코드 스타일 규칙
 
@@ -218,7 +263,7 @@ npm run lint:fix
 
 ## 라우팅 및 디렉터리 구조
 
-다음은 구현한 라우팅·레이아웃 구조와 후속 기능의 배치 예시다. `/` 진입 화면, 세 Route Group의 레이아웃·예시 페이지·전용 컴포넌트, `shared/components/layout/`은 구현했다. `_providers/`, `_hooks/`, `domains/place/`, 상태 관리 파일은 향후 배치 예시이며 아직 만들지 않았다. 공통 HTTP 코드와 `domains/example/`은 아래 HTTP 통신 절에 설명한다. 실제 코드가 필요할 때 파일을 추가하고 빈 디렉터리는 미리 만들지 않는다.
+다음은 구현한 라우팅·레이아웃 구조와 후속 기능의 배치 예시다. `/` 진입 화면, 세 Route Group의 레이아웃·예시 페이지·전용 컴포넌트, `shared/components/layout/`은 구현했다. `_providers/`와 `shared/lib/query/`도 구현했다. 페이지 전용 `_hooks/`, `domains/place/`, Zustand 파일은 향후 배치 예시다. 공통 HTTP 코드와 `domains/example/`은 HTTP 통신·서버 상태 관리 절에 설명한다. 실제 코드가 필요할 때 파일을 추가하고 빈 디렉터리는 미리 만들지 않는다.
 
 ```text
 frontend/src/
@@ -227,7 +272,7 @@ frontend/src/
 │   ├── globals.css
 │   ├── page.tsx                       # 예시 페이지 진입 화면
 │   ├── _providers/
-│   │   └── QueryProvider.tsx           # 후속 TanStack Query 작업
+│   │   └── QueryProvider.tsx           # 공통 서버 상태 설정
 │   ├── (minimal)/
 │   │   ├── layout.tsx                 # 본문만 표시
 │   │   └── minimal-example/
@@ -273,7 +318,7 @@ frontend/src/
     │   ├── http/
     │   │   └── apiClient.ts            # 공통 HTTP 인스턴스
     │   └── query/
-    │       └── queryClient.ts          # 후속 TanStack Query 작업
+    │       └── queryClient.ts          # 공통 서버 상태 설정
     ├── stores/
     │   └── useSidebarStore.ts          # 후속 Zustand 작업의 배치 예시
     └── types/
@@ -327,7 +372,7 @@ Query Key는 각 Hook에 문자열로 흩어 놓지 않고 도메인의 `queries
 
 위 세 가지 레이아웃과 페이지 전용 컴포넌트를 최소한의 Tailwind CSS 스타일로 구현했다. 레이아웃 예시는 `domains/example/`에 넣지 않는다. 해당 도메인은 후속 HTTP 통신 예시로 사용한다. 관리자 예시는 화면 구성을 보여 주며 권한 검사는 포함하지 않는다.
 
-Axios 인스턴스는 구현했으며, Query Provider·Query Client·Query Key와 Zustand Store는 각 후속 작업에서 추가한다. `domains/place/`는 향후 실제 장소 기능의 배치 예시이며 이번 예시 구현 범위에 포함하지 않는다.
+Axios 인스턴스와 Query Provider·Query Client·example Query Key는 구현했다. Zustand Store는 후속 작업에서 추가한다. `domains/place/`는 향후 실제 장소 기능의 배치 예시이며 이번 예시 구현 범위에 포함하지 않는다.
 
 ### 예시 확인과 새 페이지 추가
 

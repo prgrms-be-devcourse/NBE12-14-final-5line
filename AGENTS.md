@@ -61,6 +61,7 @@ OUTPICK은 스포츠·액티비티 장소 탐색 서비스입니다.
 - 페이지·레이아웃 작업은 `frontend/src/app/(minimal)/minimal-example/`, `frontend/src/app/(main)/main-example/`, `frontend/src/app/(admin)/admin-example/`과 각 그룹의 `layout.tsx`, `frontend/src/shared/components/layout/`을 참고합니다.
 - API·로직 테스트 작업은 [Frontend 테스트 안내](frontend/README.md#테스트), `frontend/tests/setup.ts`, `frontend/tests/mocks/server.ts`를 참고합니다. `frontend/tests/msw.test.ts`는 도구 연결 확인용으로 `fetch`를 유지합니다.
 - HTTP 통신 작업은 [Frontend HTTP 통신 안내](frontend/README.md#http-통신과-example-api), `frontend/src/shared/lib/http/`, `frontend/src/domains/example/api/`와 `frontend/src/domains/example/types/example.type.ts`를 참고합니다. 관련 테스트는 MSW를 통한 Axios 처리를 검증하며 실제 Backend·브라우저 연동 검증과 구분합니다.
+- 서버 상태 작업은 [Frontend 서버 상태 안내](frontend/README.md#서버-상태-관리와-조회-화면), `frontend/src/app/_providers/QueryProvider.tsx`, `frontend/src/shared/lib/query/queryClient.ts`, `frontend/src/domains/example/queries/`와 `hooks/`를 참고합니다. 화면 테스트는 `frontend/src/app/(main)/main-example/_components/MainExampleContent.test.tsx`, DOM 정리는 `frontend/tests/setup-dom.ts`를 참고합니다.
 - 예시를 적용할 때는 README에 설명한 구현 범위와 생략한 기능을 확인합니다. 관리자 예시는 레이아웃 구성만 보여 주며, 인증·권한 검사는 별도로 구현해야 합니다.
 - README의 구조도는 구현된 코드와 후속 작업의 배치 예시를 함께 포함합니다. 실제 파일을 확인하고, API·상태 관리 예시를 추가하는 작업에서는 README와 이 안내의 참조 경로도 함께 갱신합니다.
 
