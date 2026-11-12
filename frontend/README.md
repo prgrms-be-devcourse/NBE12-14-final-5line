@@ -1,8 +1,75 @@
 # OUTPICK Frontend
 
-Next.js + TypeScript 기반의 정적 배포를 준비한다. HTTP 통신은 Axios, 서버 상태 관리는 TanStack Query, 공유 클라이언트 상태 관리는 Zustand를 사용한다.
+Next.js + TypeScript + Tailwind CSS 기반으로 정적 파일을 빌드한다. HTTP 통신은 Axios, 서버 상태 관리는 TanStack Query, 공유 클라이언트 상태 관리는 Zustand를 사용할 예정이다.
 
-현재는 개발 규칙을 정리한 단계이며, 프로젝트 생성과 라이브러리 설치·설정은 아직 진행하지 않았다. 실행 방법은 프로젝트 구성 시 추가한다.
+현재는 기본 페이지와 정적 빌드 환경을 구성한 단계다. Axios·TanStack Query·Zustand 설치와 Backend 연결은 후속 작업에서 진행한다.
+
+## 개발 환경
+
+- Node.js: 26.13.0 기준, 26.x 사용
+- npm: 11.20.0 기준
+- Next.js App Router, TypeScript strict 모드
+- Tailwind CSS, ESLint
+- 소스 디렉터리: `src/`, import 별칭: `@/*`
+
+Node.js 설치 방식은 자유롭게 선택한다. [공식 설치 프로그램](https://nodejs.org/en/download)으로 설치한 경우 `node --version`으로 버전을 확인한다. 기존 설치를 반드시 삭제할 필요는 없다.
+
+nvm 사용자는 `frontend/`에서 다음 명령을 실행한다. `.nvmrc`에 기록한 버전을 설치하고 현재 터미널에서 선택한다.
+
+```bash
+nvm install
+nvm use
+```
+
+`.nvmrc`와 `package.json`의 `engines`는 프로젝트 기준을 기록한다. 파일만으로 Node.js가 설치되거나 전환되지는 않는다. 기본 npm 설정에서 `engines` 불일치는 경고이므로 실행 전 버전을 확인한다.
+
+## 설치 및 로컬 실행
+
+저장소 루트에서 다음 명령을 실행한다.
+
+```bash
+cd frontend
+node --version
+npm --version
+npm ci
+npm run dev
+```
+
+- `npm ci`: `package-lock.json`에 기록한 의존성을 `node_modules/`에 설치한다. 최초 설치 또는 잠금 파일 변경 후 실행한다.
+- `npm run dev`: 개발 서버를 시작한다. 브라우저에서 <http://localhost:3000>에 접속한다. 종료는 `Ctrl+C`를 사용한다.
+
+기본 페이지는 Backend나 MySQL을 실행하지 않아도 확인할 수 있다. `node_modules/`, `.next/`, `out/`은 Git에 포함하지 않는다.
+
+## 코드 검사 및 정적 빌드
+
+`frontend/`에서 실행한다.
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+```
+
+- `lint`: ESLint로 코드를 검사한다.
+- `typecheck`: Next.js의 라우트 타입을 생성한 뒤 TypeScript 타입을 검사한다.
+- `build`: `output: "export"` 설정으로 배포용 HTML·CSS·JavaScript를 `out/`에 생성한다.
+
+`out/`은 정적 파일 서버나 CDN으로 제공한다. Next.js 실행 서버를 사용하는 `next start`는 이 구성에 사용하지 않는다.
+
+Python 3가 설치되어 있다면 빌드 결과를 다음과 같이 확인할 수 있다. 이 명령은 로컬 확인용이며 실제 배포 설정은 아니다.
+
+```bash
+python3 -m http.server 3001 --bind 127.0.0.1 --directory out
+```
+
+브라우저에서 <http://localhost:3001>에 접속하고, 확인 후 `Ctrl+C`로 종료한다. 기본 페이지의 정적 제공만 확인하며, 실제 배포 환경의 경로·API 연결 검증은 후속 작업에서 진행한다.
+
+### 초기 구성 검증 결과
+
+- Node.js 26.13.0, npm 11.20.0에서 ESLint·타입 검사·정적 빌드를 통과했다.
+- 개발 서버와 정적 파일 서버에서 기본 HTML·CSS·JavaScript의 HTTP 200 응답과 Tailwind 클래스 생성을 확인했다.
+- 브라우저 연결 도구를 사용할 수 없어 화면 모양은 직접 확인하지 못했다.
+- `npm audit`에서 린트 도구의 간접 의존성인 minimatch 관련 중간 등급 경고 7건이 확인됐다. 호환 범위 내 `npm audit fix`로는 해결되지 않았으며, 강제 버전 변경은 적용하지 않았다.
 
 ## 상태 관리 규칙
 
