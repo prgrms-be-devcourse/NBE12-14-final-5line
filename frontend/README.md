@@ -2,7 +2,7 @@
 
 Next.js + TypeScript + Tailwind CSS 기반으로 정적 파일을 빌드한다. HTTP 통신은 Axios, 서버 상태 관리는 TanStack Query, 공유 클라이언트 상태 관리는 Zustand를 사용할 예정이다.
 
-현재는 기본 페이지와 정적 빌드 환경을 구성한 단계다. Axios·TanStack Query·Zustand 설치와 Backend 연결은 후속 작업에서 진행한다.
+현재는 개발 환경과 세 가지 레이아웃 예시를 구성한 단계다. Axios·TanStack Query·Zustand 설치와 Backend 연결은 후속 작업에서 진행한다.
 
 ## 개발 환경
 
@@ -115,6 +115,119 @@ npm run lint:fix
 설치된 안정 패키지에서도 `list-style` 규칙 자체는 실험 기능으로 표시되어 있어 자동 강제는 보류한다. 
 
 향후 CI에 적용할 검사의 안정성을 고려한 결정이며, 규칙이 안정화되면 다시 검토한다.
+
+## 라우팅 및 디렉터리 구조
+
+다음은 구현한 라우팅·레이아웃 구조와 후속 기능의 배치 예시다. `/` 진입 화면, 세 Route Group의 레이아웃·예시 페이지·전용 컴포넌트, `shared/components/layout/`은 구현했다. `_providers/`, `_hooks/`, `domains/`, 공통 통신·상태 관리 파일은 향후 배치 예시이며 아직 만들지 않았다. 실제 코드가 필요할 때 파일을 추가하고 빈 디렉터리는 미리 만들지 않는다.
+
+```text
+frontend/src/
+├── app/
+│   ├── layout.tsx                     # html·body·공통 Provider 연결
+│   ├── globals.css
+│   ├── page.tsx                       # 예시 페이지 진입 화면
+│   ├── _providers/
+│   │   └── QueryProvider.tsx           # 후속 TanStack Query 작업
+│   ├── (minimal)/
+│   │   ├── layout.tsx                 # 본문만 표시
+│   │   └── minimal-example/
+│   │       ├── page.tsx
+│   │       └── _components/
+│   │           └── MinimalExampleContent.tsx
+│   ├── (main)/
+│   │   ├── layout.tsx                 # MainLayout 적용
+│   │   └── main-example/
+│   │       ├── page.tsx
+│   │       ├── _components/
+│   │       │   └── MainExampleContent.tsx
+│   │       └── _hooks/                # 페이지 전용 Hook이 필요할 때
+│   └── (admin)/
+│       ├── layout.tsx                 # AdminLayout 적용
+│       └── admin-example/
+│           ├── page.tsx
+│           └── _components/
+│               └── AdminExampleContent.tsx
+├── domains/
+│   └── place/                         # 실제 장소 기능 구현 시 배치 예시
+│       ├── components/
+│       ├── hooks/
+│       │   ├── usePlacesQuery.ts
+│       │   └── usePlaceQuery.ts
+│       ├── api/
+│       │   └── placeApi.ts
+│       ├── queries/
+│       │   └── placeQueryKeys.ts
+│       ├── stores/
+│       └── types/
+└── shared/
+    ├── components/
+    │   └── layout/
+    │       ├── MainLayout.tsx
+    │       ├── AdminLayout.tsx
+    │       ├── Header.tsx
+    │       ├── Sidebar.tsx
+    │       └── AdminSidebar.tsx
+    ├── hooks/
+    ├── lib/
+    │   ├── http/
+    │   │   └── apiClient.ts            # 후속 Axios 작업
+    │   └── query/
+    │       └── queryClient.ts          # 후속 TanStack Query 작업
+    ├── stores/
+    │   └── useSidebarStore.ts          # 후속 Zustand 작업의 배치 예시
+    └── types/
+```
+
+### 코드 배치와 참조 방향
+
+| 위치 | 담당 |
+|---|---|
+| `app/` | URL, 레이아웃, 페이지 구성과 앱 초기 연결 |
+| 페이지의 `_components/`, `_hooks/` | 해당 페이지에서만 사용하는 컴포넌트와 Hook |
+| `domains/도메인명/components/` | 여러 화면에서 사용하는 도메인 전용 UI |
+| `domains/도메인명/api/` | 도메인 API 요청 함수 |
+| `domains/도메인명/queries/` | 도메인의 Query Key 등 TanStack Query 관련 정의 |
+| `domains/도메인명/hooks/` | 요청 함수와 Query Key를 연결하는 조회 Hook 등 |
+| `domains/도메인명/stores/` | 해당 도메인에서 공유하는 클라이언트 상태 |
+| `domains/도메인명/types/` | 도메인 요청·응답 등 타입 |
+| `shared/` | 도메인과 무관한 공통 UI·Hook·통신 설정·Store·타입 |
+
+참조 방향은 `app → domains → shared`와 `app → shared`로 유지한다. `domains`는 `app`을 참조하지 않고, `shared`는 `app`이나 `domains`를 참조하지 않는다.
+
+페이지 전용 컴포넌트는 여러 도메인 기능을 조합할 수 있다. 일반 화면과 관리자 화면이 같은 장소 API를 사용해도 장소 코드는 `domains/place/`에서 관리한다. 페이지나 레이아웃 종류마다 도메인을 만들지 않는다.
+
+Query Key는 각 Hook에 문자열로 흩어 놓지 않고 도메인의 `queries/`에서 함께 정의한다. 서버 응답은 TanStack Query가 관리하고 Zustand에 복사하지 않는다. 도메인 전용 공유 UI 상태는 해당 도메인의 `stores/`에, 여러 도메인에서 사용하는 공통 UI 상태는 `shared/stores/`에 둔다. 한 컴포넌트의 상태와 URL 검색 조건은 [상태 관리 규칙](#상태-관리-규칙)을 따른다.
+
+### 레이아웃과 예시 URL
+
+최상위 `app/layout.tsx`에는 모든 화면에 필요한 `html`, `body`, 공통 Provider를 둔다. 각 Route Group의 `layout.tsx`는 레이아웃 컴포넌트에 `children`을 전달하고, 실제 헤더·사이드바 배치는 `shared/components/layout/`의 컴포넌트에서 구성한다. 최소 레이아웃은 `children`만 반환한다.
+
+`(minimal)` 같은 Route Group은 URL에 포함되지 않는다. `_components`, `_hooks`, `_providers`는 라우팅 대상에서 제외하는 내부 디렉터리다.
+
+| 예시 URL | 레이아웃 |
+|---|---|
+| `/` | 예시 페이지로 이동하는 진입 화면 |
+| `/minimal-example` | 본문만 표시 |
+| `/main-example` | 일반 헤더 + 사이드바 |
+| `/admin-example` | 관리자 헤더 + 관리자 사이드바 |
+
+위 세 가지 레이아웃과 페이지 전용 컴포넌트를 최소한의 Tailwind CSS 스타일로 구현했다. `domains/example/`은 만들지 않는다. 관리자 예시는 화면 구성을 보여 주며 권한 검사는 포함하지 않는다.
+
+Axios 인스턴스, Query Provider·Query Client·Query Key, Zustand Store는 각 후속 작업에서 추가한다. `domains/place/`는 향후 실제 장소 기능의 배치 예시이며 이번 예시 구현 범위에 포함하지 않는다.
+
+### 예시 확인과 새 페이지 추가
+
+`make frontend-dev`로 실행한 뒤 `/`에서 각 예시 링크로 이동한다. 각 주소로 직접 접속하거나 새로고침하고, 예시 목록으로 돌아오는 링크도 확인한다. 일반·관리자 사이드바는 넓은 화면에서는 왼쪽에, 좁은 화면에서는 본문 위에 배치한다.
+
+새 페이지는 원하는 레이아웃의 Route Group 아래에 `page.tsx`를 추가한다. 페이지 전용 컴포넌트는 해당 경로의 `_components/`에 두고, 상위 그룹의 `layout.tsx`가 적용하는 헤더·사이드바를 페이지에서 다시 작성하지 않는다.
+
+이번 구현은 ESLint·타입 검사를 통과했다. 개발 서버의 네 경로에서 HTTP 200, 레이아웃별 헤더·사이드바 포함 여부, 진입·복귀 링크를 HTML로 확인했다. 브라우저에서 링크 클릭·뒤로 가기·반응형 화면의 시각적 확인은 수행하지 않았다. 이번 변경의 정적 빌드 검증은 사용자 요청에 따라 생략했다.
+
+### 장소 상세 URL과 메타정보
+
+장소 상세 URL은 `/places/detail?id=123`으로 정한다. 정적 상세 페이지를 제공하고 브라우저에서 `id`를 읽어 API로 해당 장소를 조회하는 방향이다. 실제 장소 페이지와 API 연결은 담당 기능 개발에서 구현한다.
+
+OUTPICK 공통 OG 태그를 제공하는 방향으로 두고, 장소별 OG 태그·검색엔진 노출 요구사항은 주요 기능 개발 후 팀과 논의한다. 장소별 정적 HTML 생성이나 Backend 공유 URL은 그때 검토한다.
 
 ## 상태 관리 규칙
 

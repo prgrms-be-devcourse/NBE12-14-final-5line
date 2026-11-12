@@ -55,6 +55,13 @@ OUTPICK은 스포츠·액티비티 장소 탐색 서비스입니다.
 - 참고 문서와 현재 코드가 충돌하거나 중요한 결정이 필요하면 사용자에게 확인합니다.
 - 사전 준비 계획에 포함되어 있다는 이유만으로 요청하지 않은 작업까지 구현하지 않습니다.
 
+### Frontend 작업 시 참고 기준
+
+- Frontend 코드를 작성하거나 수정하기 전에 [Frontend README](frontend/README.md)의 라우팅 및 디렉터리 구조·코드 배치와 참조 방향·상태 관리 규칙을 확인합니다. 세부 규칙은 해당 문서를 기준으로 합니다.
+- 페이지·레이아웃 작업은 `frontend/src/app/(minimal)/minimal-example/`, `frontend/src/app/(main)/main-example/`, `frontend/src/app/(admin)/admin-example/`과 각 그룹의 `layout.tsx`, `frontend/src/shared/components/layout/`을 참고합니다.
+- 예시를 적용할 때는 README에 설명한 구현 범위와 생략한 기능을 확인합니다. 관리자 예시는 레이아웃 구성만 보여 주며, 인증·권한 검사는 별도로 구현해야 합니다.
+- README의 구조도는 구현된 코드와 후속 작업의 배치 예시를 함께 포함합니다. 실제 파일을 확인하고, API·상태 관리 예시를 추가하는 작업에서는 README와 이 안내의 참조 경로도 함께 갱신합니다.
+
 ## 작업 완료 보고
 
 작업 완료 시 다음 사항을 간결하게 보고합니다.
