@@ -11,5 +11,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     setupFiles: ['./tests/setup.ts'],
+    env: {
+      NEXT_PUBLIC_API_BASE_URL: 'https://api.outpick.test',
+    },
   },
 });

@@ -1,8 +1,8 @@
 # OUTPICK Frontend
 
-Next.js + TypeScript + Tailwind CSS 기반으로 정적 파일을 빌드한다. HTTP 통신은 Axios, 서버 상태 관리는 TanStack Query, 공유 클라이언트 상태 관리는 Zustand를 사용할 예정이다.
+Next.js + TypeScript + Tailwind CSS 기반으로 정적 파일을 빌드한다. HTTP 통신은 Axios를 사용하고, 서버 상태 관리는 TanStack Query, 공유 클라이언트 상태 관리는 Zustand를 사용할 예정이다.
 
-현재는 개발 환경과 세 가지 레이아웃 예시를 구성한 단계다. Axios·TanStack Query·Zustand 설치와 Backend 연결은 후속 작업에서 진행한다.
+현재는 개발 환경·레이아웃 예시와 Axios 기반 example API 함수를 구성했다. 화면에서 API를 호출하는 예시와 TanStack Query·Zustand는 후속 작업에서 연결한다.
 
 ## 개발 환경
 
@@ -49,7 +49,7 @@ make frontend-dev
 |---|---|---|
 | `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | Backend API 서버의 기본 주소. `/api` 등의 요청 경로는 후속 Axios 구성에서 연결 |
 
-현재는 환경변수 예제만 준비했으며, 실제 API 요청에서 사용하는 코드는 Axios 작업에서 추가한다.
+공통 Axios 인스턴스가 이 값을 읽는다. API 모듈을 사용하는 실행·빌드 환경에는 이 변수가 필요하며 누락되거나 유효한 HTTP(S) URL이 아니면 초기화 시 실패한다.
 
 `NEXT_PUBLIC_` 변수는 브라우저에 공개되므로 비밀번호·토큰을 넣지 않는다. 정적 배포에서는 빌드 시 값이 고정되므로 배포 환경의 API 주소를 설정한 뒤 빌드한다. 값 변경 후 개발 서버는 다시 시작하고, 배포 파일은 다시 빌드한다. 터미널에서 이미 설정한 동일한 이름의 환경변수는 `.env.local`보다 우선한다.
 
@@ -119,11 +119,72 @@ MSW는 실제 포트를 여는 서버가 아니라 테스트 프로세스의 요
 
 공통 설정은 `tests/`에 두고, 실제 기능 테스트는 `src/`의 해당 코드 가까이에 `exampleApi.test.ts`처럼 추가한다. 테스트 함수와 검증 함수는 `vitest`에서 명시적으로 import하며, `it`에는 입력 상황과 검증 결과를 한국어로 작성한다.
 
-현재 두 테스트는 기본 `fetch`로 성공 응답의 상태·JSON, 실패 응답의 404 상태·`application/problem+json` Content-Type·본문을 읽는 것을 확인한다. 테스트 URL과 데이터는 도구 연결 확인용이며 실제 Backend 계약 검증이 아니다. Axios의 오류 변환이나 브라우저의 응답 처리는 아직 검증하지 않는다.
+현재 두 테스트는 기본 `fetch`로 성공 응답의 상태·JSON, 실패 응답의 404 상태·`application/problem+json` Content-Type·본문을 읽는 것을 확인한다. 테스트 URL과 데이터는 도구 연결 확인용이며 실제 Backend 계약 검증이 아니다. 이 연결 테스트의 `fetch`는 의도적으로 유지한다. 실제 API 함수는 공통 Axios 인스턴스를 사용하며 별도 테스트에서 오류 변환을 확인한다. 브라우저의 응답 처리는 이 Node 테스트로 검증하지 않는다.
 
-Axios 공통 코드의 동작 테스트는 다음 작업에서 작성한다. 컴포넌트 테스트용 React Testing Library·DOM 환경과 실제 브라우저 흐름용 Playwright는 필요한 시점에 별도로 도입한다.
+Axios 공통 코드와 example API 테스트는 각 구현 파일 가까이에 작성했다. 컴포넌트 테스트용 React Testing Library·DOM 환경과 실제 브라우저 흐름용 Playwright는 필요한 시점에 별도로 도입한다.
 
 참고: [Vitest 설정](https://vitest.dev/config/), [MSW Node 통합](https://mswjs.io/guides/integrations/node).
+
+## HTTP 통신과 example API
+
+Axios 1.21.1의 공통 인스턴스는 `NEXT_PUBLIC_API_BASE_URL`, 쿠키 전송 허용(`withCredentials: true`), 기본 타임아웃 10초를 사용한다. HTTP 성공 응답은 그대로 유지하며 도메인 API 함수가 `response.data`인 DTO를 반환한다.
+
+```text
+src/
+├── shared/
+│   └── lib/http/
+│       ├── apiClient.ts
+│       ├── apiClient.test.ts
+│       ├── apiError.ts
+│       └── apiError.type.ts
+└── domains/example/
+    ├── api/
+    │   ├── exampleApi.ts
+    │   └── exampleApi.test.ts
+    └── types/
+        └── example.type.ts
+```
+
+- `getExample({ id, signal })`: `GET /api/examples/{id}`로 조회한다. Backend 예시는 ID 1에서 성공하고 다른 양수 ID에서 업무 오류를 반환한다. 선택적인 `signal`로 요청을 취소할 수 있다.
+- `previewExample({ name, participantCount })`: `POST /api/examples/preview`로 미리보기를 요청한다. 저장하지 않으며 이름·인원수의 Backend Validation을 적용한다.
+- 두 함수는 `{ name, participantCount }`를 반환하고 `data` 래퍼를 추가하지 않는다. TypeScript DTO 타입은 Backend 계약을 표현하며 성공 JSON의 런타임 검증 기능은 아니다.
+
+### 공통 오류 사용
+
+Axios 실패는 `ApiError`로 변환한다. `error.message`로 설명을 읽고 `error.details.kind`로 종류를 구분한다. HTTP 응답을 받았다면 `details.status`, `code`, `requestId`, `fieldErrors`를 사용할 수 있다. `code`와 `requestId`는 유효한 문자열을 받은 경우에 제공하고, 필드 오류가 없으면 빈 배열을 사용한다.
+
+```ts
+import { getExample } from '@/domains/example/api/exampleApi';
+import { ApiError } from '@/shared/lib/http/apiError';
+
+try {
+  const example = await getExample({ id: 1 });
+  // example을 호출한 화면이나 조회 Hook에서 사용한다.
+} catch (error: unknown) {
+  if (error instanceof ApiError && error.details.kind === 'http') {
+    // error.details.status, code, requestId, fieldErrors로 화면별 처리를 결정한다.
+  }
+}
+```
+
+위 코드는 오류 정보 접근을 보여 주는 부분 예시다. 실제 화면에서는 성공 데이터를 사용하고, 각 실패 종류와 예상하지 못한 예외를 처리한다.
+
+| `details.kind` | 의미 |
+|---|---|
+| `http` | HTTP 응답을 받은 실패. `application/problem+json`의 설명·코드·요청 ID·필드 오류를 확인해 유지 |
+| `network` | 응답 없는 연결 실패. 브라우저의 CORS 차단과 연결 실패를 정확히 구분하지 않음 |
+| `timeout` | 제한 시간 초과 |
+| `canceled` | AbortSignal 등으로 요청 취소 |
+
+ProblemDetail이 아닌 JSON·HTML 응답이나 형식이 다른 필드는 안전한 공통 안내로 처리한다. 상태 코드는 본문의 `status` 대신 실제 HTTP 응답을 기준으로 삼는다. Axios와 무관한 예외는 원래 오류를 유지한다. 자동 재시도·토큰 갱신·로그인 이동·전역 알림은 구현하지 않았다.
+
+쿠키 전송 허용만으로 인증 연결이 완성되지는 않는다. 실제 브라우저 연동에는 Backend의 CORS와 쿠키 SameSite·Secure 등 인증 정책 합의가 필요하다. 이번 작업에서는 Backend 설정을 변경하지 않았다.
+
+### 테스트 범위
+
+`vitest.config.mts`는 테스트 전용 API 주소를 지정하므로 개인 `.env.local`이나 실제 Backend에 의존하지 않는다. MSW로 example 조회·미리보기 성공, 업무·Validation 오류, 비표준 응답, 네트워크 실패·타임아웃·취소를 재현한다. 실제 Backend·브라우저·쿠키 전송·CORS 연결 검증은 포함하지 않는다. 화면과 TanStack Query 연결은 다음 작업에서 진행한다.
+
+참고: [Axios 오류 처리](https://axios-http.com/docs/handling_errors), [Axios 요청 설정](https://axios-http.com/docs/req_config).
 
 ## 코드 스타일 규칙
 
@@ -157,7 +218,7 @@ npm run lint:fix
 
 ## 라우팅 및 디렉터리 구조
 
-다음은 구현한 라우팅·레이아웃 구조와 후속 기능의 배치 예시다. `/` 진입 화면, 세 Route Group의 레이아웃·예시 페이지·전용 컴포넌트, `shared/components/layout/`은 구현했다. `_providers/`, `_hooks/`, `domains/`, 공통 통신·상태 관리 파일은 향후 배치 예시이며 아직 만들지 않았다. 실제 코드가 필요할 때 파일을 추가하고 빈 디렉터리는 미리 만들지 않는다.
+다음은 구현한 라우팅·레이아웃 구조와 후속 기능의 배치 예시다. `/` 진입 화면, 세 Route Group의 레이아웃·예시 페이지·전용 컴포넌트, `shared/components/layout/`은 구현했다. `_providers/`, `_hooks/`, `domains/place/`, 상태 관리 파일은 향후 배치 예시이며 아직 만들지 않았다. 공통 HTTP 코드와 `domains/example/`은 아래 HTTP 통신 절에 설명한다. 실제 코드가 필요할 때 파일을 추가하고 빈 디렉터리는 미리 만들지 않는다.
 
 ```text
 frontend/src/
@@ -198,6 +259,7 @@ frontend/src/
 │       │   └── placeQueryKeys.ts
 │       ├── stores/
 │       └── types/
+│           └── place.type.ts          # 장소 요청·응답 타입의 배치 예시
 └── shared/
     ├── components/
     │   └── layout/
@@ -209,7 +271,7 @@ frontend/src/
     ├── hooks/
     ├── lib/
     │   ├── http/
-    │   │   └── apiClient.ts            # 후속 Axios 작업
+    │   │   └── apiClient.ts            # 공통 HTTP 인스턴스
     │   └── query/
     │       └── queryClient.ts          # 후속 TanStack Query 작업
     ├── stores/
@@ -237,6 +299,19 @@ frontend/src/
 
 Query Key는 각 Hook에 문자열로 흩어 놓지 않고 도메인의 `queries/`에서 함께 정의한다. 서버 응답은 TanStack Query가 관리하고 Zustand에 복사하지 않는다. 도메인 전용 공유 UI 상태는 해당 도메인의 `stores/`에, 여러 도메인에서 사용하는 공통 UI 상태는 `shared/stores/`에 둔다. 한 컴포넌트의 상태와 URL 검색 조건은 [상태 관리 규칙](#상태-관리-규칙)을 따른다.
 
+### 타입 파일 이름
+
+`type`·`interface`를 모은 파일은 `*.type.ts`로 작성하고, 사용하는 기능의 소유 범위에 맞춰 배치한다. 편집기 탭에서도 구현 파일과 타입 파일을 구분하기 위한 규칙이다.
+
+- 도메인 타입 예시: `domains/example/types/example.type.ts`
+- 특정 공통 기능 전용 타입은 해당 기능 가까이에 둔다. HTTP 오류 타입은 `shared/lib/http/apiError.type.ts`에 배치한다. 여러 도메인에서 가져다 쓰더라도 HTTP 기능이 소유하는 타입이다.
+- 여러 기능에서 공통으로 사용하는 타입은 `shared/types/`에 배치한다.
+- 한 파일에서만 사용하는 작은 Props 타입은 해당 컴포넌트 파일에 둔다.
+- 타입을 가져올 때는 `import type`을 사용한다.
+- 실행 코드가 필요한 함수·클래스·상수·enum은 역할에 맞는 일반 `.ts` 파일에 둔다.
+
+`*.type.ts`는 팀의 파일명 규칙이며 TypeScript의 선언 파일인 `*.d.ts`와 구분한다. API 요청·응답 DTO 타입에도 `*.type.ts`를 사용한다. 위 경로는 배치 예시이며 실제 코드가 필요할 때 추가한다.
+
 ### 레이아웃과 예시 URL
 
 최상위 `app/layout.tsx`에는 모든 화면에 필요한 `html`, `body`, 공통 Provider를 둔다. 각 Route Group의 `layout.tsx`는 레이아웃 컴포넌트에 `children`을 전달하고, 실제 헤더·사이드바 배치는 `shared/components/layout/`의 컴포넌트에서 구성한다. 최소 레이아웃은 `children`만 반환한다.
@@ -250,9 +325,9 @@ Query Key는 각 Hook에 문자열로 흩어 놓지 않고 도메인의 `queries
 | `/main-example` | 일반 헤더 + 사이드바 |
 | `/admin-example` | 관리자 헤더 + 관리자 사이드바 |
 
-위 세 가지 레이아웃과 페이지 전용 컴포넌트를 최소한의 Tailwind CSS 스타일로 구현했다. `domains/example/`은 만들지 않는다. 관리자 예시는 화면 구성을 보여 주며 권한 검사는 포함하지 않는다.
+위 세 가지 레이아웃과 페이지 전용 컴포넌트를 최소한의 Tailwind CSS 스타일로 구현했다. 레이아웃 예시는 `domains/example/`에 넣지 않는다. 해당 도메인은 후속 HTTP 통신 예시로 사용한다. 관리자 예시는 화면 구성을 보여 주며 권한 검사는 포함하지 않는다.
 
-Axios 인스턴스, Query Provider·Query Client·Query Key, Zustand Store는 각 후속 작업에서 추가한다. `domains/place/`는 향후 실제 장소 기능의 배치 예시이며 이번 예시 구현 범위에 포함하지 않는다.
+Axios 인스턴스는 구현했으며, Query Provider·Query Client·Query Key와 Zustand Store는 각 후속 작업에서 추가한다. `domains/place/`는 향후 실제 장소 기능의 배치 예시이며 이번 예시 구현 범위에 포함하지 않는다.
 
 ### 예시 확인과 새 페이지 추가
 
