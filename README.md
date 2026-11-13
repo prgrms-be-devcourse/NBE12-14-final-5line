@@ -1,5 +1,19 @@
 # OUTPICK 로컬 개발 환경
 
+## CI 자동 검사
+
+GitHub Actions 설정은 `.github/workflows/frontend-ci.yml`, `.github/workflows/backend-ci.yml`에서 관리합니다.
+
+- `develop`·`main` 대상 PR 생성/갱신 및 두 브랜치에 푸시할 때 프론트·백엔드를 각각 검사합니다. 개인 작업 브랜치에 푸시만 한 경우에는 실행하지 않으며, 대상 브랜치로 PR을 생성해야 합니다.
+- 프론트: `.nvmrc`의 Node.js 준비 → `npm ci` → 린트 → 타입 검사 → 테스트 → 정적 빌드.
+- 백엔드: Java 25 준비 → Docker 확인 → `./gradlew --no-daemon build`로 테스트·빌드. Testcontainers가 테스트용 MySQL을 생성하므로 별도 MySQL 서비스나 로컬 `.env`가 필요하지 않습니다.
+- 프론트 CI는 검사용 API 주소를 사용하며 실제 서버에 접속하지 않습니다. 개인 `.env.local`·카카오 키·AWS 키를 등록하지 않습니다. 실제 지도·브라우저 연동 검증은 별도로 수행합니다.
+- 백엔드 테스트 결과는 실행 화면의 Artifacts에서 `backend-test-reports`로 내려받을 수 있으며 7일간 보관합니다.
+- 결과는 PR의 Checks 또는 저장소 Actions 탭에서 확인합니다. 실패한 단계의 로그를 보고 수정한 뒤 같은 브랜치에 다시 푸시합니다.
+- 이 설정은 자동 검사(CI)이며 운영 배포(CD)는 포함하지 않습니다. 실패 시 머지를 막으려면 팀 관리자가 브랜치 보호 규칙에 두 검사를 필수로 지정해야 합니다.
+
+외부 Action은 검증한 버전의 커밋 SHA로 고정했으며, 주석에 major 버전을 표시했습니다.
+
 ## MySQL 실행
 
 Java 25, Docker Compose, Make가 필요합니다. Docker를 먼저 실행합니다.
