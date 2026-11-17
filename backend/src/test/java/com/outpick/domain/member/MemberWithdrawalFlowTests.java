@@ -3,6 +3,7 @@ package com.outpick.domain.member;
 import com.outpick.domain.member.repository.MemberRepository;
 import com.outpick.domain.member.repository.PasswordResetTokenRepository;
 import com.outpick.domain.member.service.PasswordResetService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -36,6 +37,7 @@ class MemberWithdrawalFlowTests {
     @Autowired PasswordResetService resetService;
 
     @Test
+    @DisplayName("비밀번호와 최종 확인을 거친 탈퇴가 계정·토큰·기존 세션을 정리하는지 검증한다")
     void withdrawalRequiresConfirmationAndPasswordThenRemovesAccountTokensAndSessions() throws Exception {
         var first = csrfSession();
         mvc.perform(post("/api/v1/auth/signup").session(first.session()).header(first.header(), first.csrf())
