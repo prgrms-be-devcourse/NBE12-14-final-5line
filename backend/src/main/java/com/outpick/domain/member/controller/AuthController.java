@@ -9,6 +9,7 @@ import com.outpick.domain.member.security.MemberSessionPrincipal;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -55,7 +56,7 @@ public class AuthController {
         }
         var authentication = new UsernamePasswordAuthenticationToken(
                 new MemberSessionPrincipal(member.getId(), member.getAuthVersion()), null,
-                java.util.List.of(new SimpleGrantedAuthority("ROLE_USER")));
+                List.of(new SimpleGrantedAuthority("ROLE_USER")));
         var context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);

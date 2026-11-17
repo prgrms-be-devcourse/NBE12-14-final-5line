@@ -3,6 +3,7 @@ package com.outpick.domain.member;
 import com.outpick.domain.member.repository.MemberRepository;
 import com.outpick.domain.member.service.MemberService;
 import jakarta.servlet.http.HttpSession;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -33,6 +34,7 @@ class MemberAuthFlowTests {
     @Autowired MemberService memberService;
 
     @Test
+    @DisplayName("회원가입·로그인·내 정보 조회와 이전 세션 무효화를 검증한다")
     void signupLoginAndCurrentMemberUseTheSameSession() throws Exception {
         var csrfResult = mvc.perform(get("/api/v1/auth/csrf"))
                 .andExpect(status().isOk())

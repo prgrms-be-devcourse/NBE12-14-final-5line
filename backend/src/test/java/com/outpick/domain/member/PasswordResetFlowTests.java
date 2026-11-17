@@ -5,6 +5,7 @@ import com.outpick.domain.member.repository.PasswordResetTokenRepository;
 import com.outpick.domain.member.service.MemberService;
 import com.outpick.global.error.BusinessException;
 import java.util.regex.Pattern;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -45,6 +46,7 @@ class PasswordResetFlowTests {
     @MockitoBean JavaMailSender sender;
 
     @Test
+    @DisplayName("비밀번호 재설정 요청의 동일 응답, 일회용 토큰, 이전 세션 차단을 검증한다")
     void resetIsSingleUseAndRevokesOldSessionWithoutRevealingUnknownEmail() throws Exception {
         var csrfResponse = mvc.perform(get("/api/v1/auth/csrf")).andExpect(status().isOk()).andReturn();
         var session = (MockHttpSession) csrfResponse.getRequest().getSession(false);
