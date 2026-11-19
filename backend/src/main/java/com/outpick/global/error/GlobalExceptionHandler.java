@@ -172,7 +172,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     /**
      * Spring MVC 기본 예외와 예상치 못한 예외를 공개용 오류 응답으로 변환합니다.<br />
-     * 5xx 오류의 원인은 로그에 남기고, 응답에는 공통 안내 문구를 사용합니다.<br />
+     * 5xx 오류의 유형과 발생 위치만 로그에 남기고, 응답에는 공통 안내 문구를 사용합니다.<br />
      * Spring이 정한 HTTP 상태와 Allow 등의 응답 헤더는 유지합니다.
      */
     @Override
@@ -186,8 +186,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         HttpStatus httpStatus = HttpStatus.resolve(status.value());
 
         if (status.is5xxServerError()) {
-            // 5xx 에러 => Exception(StackTrace)를 Log에 기록
-            log.error("Server request failure: status={}", status.value(), exception);
+            // 예외 메시지와 스택의 인자값에는 요청 데이터가 섞일 수 있어 유형과 발생 위치만 기록합니다.
+            String origin = exception.getStackTrace().length == 0 ? "unknown"
+                    : exception.getStackTrace()[0].getClassName() + "." + exception.getStackTrace()[0].getMethodName();
+            log.error("Server request failure: status={} type={} origin={}",
+                    status.value(), exception.getClass().getSimpleName(), origin);
         } else {
             // 그 외 에러 => status만 경고로 Log에 기록
             log.warn("Rejected request: status={}", status.value());
