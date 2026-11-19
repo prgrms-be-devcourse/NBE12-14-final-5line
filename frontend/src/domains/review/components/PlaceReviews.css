@@ -7,6 +7,11 @@
 .outpick-reviewEditor label { display: block; margin-bottom: 10px; font-size: 14px; font-weight: 700; }
 .outpick-reviewEditor textarea { box-sizing: border-box; width: 100%; padding: 12px; border: 1px solid #d7deea; border-radius: 8px; font: inherit; line-height: 1.6; resize: vertical; }
 .outpick-reviewEditor textarea:focus-visible { outline: 2px solid #6156ff; outline-offset: 2px; }
+.outpick-reviewDraftPhotos { margin-top: 14px; }
+.outpick-reviewDraftPhotos input { max-width: 100%; font-size: 12px; }
+.outpick-reviewDraftPhotos ul { list-style: none; padding: 0; margin: 9px 0 0; }
+.outpick-reviewDraftPhotos li { display: flex; align-items: center; gap: 10px; margin-top: 5px; font-size: 12px; overflow-wrap: anywhere; }
+.outpick-reviewDraftPhotos li button { border: 0; border-radius: 6px; padding: 4px 7px; color: #5147d9; background: #f0efff; cursor: pointer; }
 .outpick-reviewEditorActions, .outpick-reviewActions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px; }
 .outpick-reviewEditorActions span, .outpick-reviewMeta time { color: #8793a7; font-size: 12px; }
 .outpick-reviewEditorActions button, .outpick-reviewActions button { border: 0; padding: 8px 12px; border-radius: 7px; background: #f0efff; color: #5147d9; cursor: pointer; }
