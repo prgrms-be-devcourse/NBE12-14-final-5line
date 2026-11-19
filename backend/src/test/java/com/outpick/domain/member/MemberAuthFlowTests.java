@@ -120,4 +120,33 @@ class MemberAuthFlowTests {
         mvc.perform(get("/api/v1/members/me"))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    @DisplayName("같은 이메일과 접속 주소의 로그인 실패가 다섯 번 쌓이면 추가 시도를 제한한다")
+    void repeatedFailedLoginsAreLimitedWithoutBlockingOtherAccounts() throws Exception {
+        var csrfResult = mvc.perform(get("/api/v1/auth/csrf")).andExpect(status().isOk()).andReturn();
+        var session = (org.springframework.mock.web.MockHttpSession) csrfResult.getRequest().getSession(false);
+        String csrf = com.jayway.jsonpath.JsonPath.read(csrfResult.getResponse().getContentAsString(), "$.token");
+        String header = com.jayway.jsonpath.JsonPath.read(csrfResult.getResponse().getContentAsString(), "$.headerName");
+        mvc.perform(post("/api/v1/auth/signup").session(session).header(header, csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"limit@example.com\",\"password\":\"password123\",\"nickname\":\"테스트\"}"))
+                .andExpect(status().isCreated());
+
+        for (int attempt = 0; attempt < 5; attempt++) {
+            mvc.perform(post("/api/v1/auth/login").session(session).header(header, csrf)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"email\":\"LIMIT@example.com\",\"password\":\"wrong-password\"}"))
+                    .andExpect(status().isUnauthorized());
+        }
+        mvc.perform(post("/api/v1/auth/login").session(session).header(header, csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"limit@example.com\",\"password\":\"password123\"}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("LOGIN_RATE_LIMITED"));
+        mvc.perform(post("/api/v1/auth/login").session(session).header(header, csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"another@example.com\",\"password\":\"wrong-password\"}"))
+                .andExpect(status().isUnauthorized());
+    }
 }
