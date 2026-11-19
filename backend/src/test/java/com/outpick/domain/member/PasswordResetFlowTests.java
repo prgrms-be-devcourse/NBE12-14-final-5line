@@ -75,7 +75,7 @@ class PasswordResetFlowTests {
         var captor = org.mockito.ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(sender, times(1)).send(captor.capture());
         String body = captor.getValue().getText();
-        var matcher = Pattern.compile("token=([A-Za-z0-9_-]{43})").matcher(body);
+        var matcher = Pattern.compile("/reset-password/#token=([A-Za-z0-9_-]{43})").matcher(body);
         assertThat(matcher.find()).isTrue();
         String rawToken = matcher.group(1);
         assertThat(tokens.findAll()).hasSize(1)
