@@ -3,6 +3,7 @@ package com.outpick.domain.place;
 import com.jayway.jsonpath.JsonPath;
 import com.outpick.domain.place.entity.Region;
 import com.outpick.domain.place.repository.RegionRepository;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,6 +11,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +34,8 @@ class AdminPlaceApiTests {
 
     @Autowired MockMvc mvc;
     @Autowired RegionRepository regions;
+    @Autowired JdbcTemplate jdbc;
+    @Autowired EntityManager entityManager;
 
     @Test
     @DisplayName("운영자가 추가한 장소는 초안으로 저장되고 공개 검색에는 보이지 않는다")
@@ -77,6 +81,19 @@ class AdminPlaceApiTests {
                                 {"regionId":1,"name":"허용 안 됨","address":"주소",
                                  "latitude":37.5,"longitude":127.1}
                                 """))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("로그인 후 운영자 역할을 잃으면 기존 세션으로 운영 데이터를 조회할 수 없다")
+    void currentRoleIsCheckedDespiteCachedSessionAuthority() throws Exception {
+        var admin = login("admin@example.com", "12341234");
+        jdbc.update("UPDATE `user` SET role = 'USER' WHERE email = ?", "admin@example.com");
+        entityManager.clear();
+
+        mvc.perform(get("/api/v1/admin/dashboard").session(admin.session()))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/admin/places").session(admin.session()))
                 .andExpect(status().isForbidden());
     }
 
