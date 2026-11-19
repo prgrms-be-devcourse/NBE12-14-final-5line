@@ -19,6 +19,8 @@ function PlaceReviewsForPlace({ placeId }: { placeId: number }) {
   const [loading, setLoading] = useState(true);
   const [memberCheckFailed, setMemberCheckFailed] = useState(false);
   const [body, setBody] = useState('');
+  const [draftPhotos, setDraftPhotos] = useState<File[]>([]);
+  const [createdReviewId, setCreatedReviewId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [reportingId, setReportingId] = useState<number | null>(null);
@@ -48,18 +50,44 @@ function PlaceReviewsForPlace({ placeId }: { placeId: number }) {
 
   async function save() {
     const text = body.trim();
-    if (!text || text.length > 2000 || busy) return;
+    if ((!text && createdReviewId === null) || text.length > 2000 || busy) return;
     setBusy(true);
     setError('');
+    let savedReviewId = createdReviewId;
     try {
-      if (editingId === null) await createReview(placeId, text);
-      else await updateReview(editingId, text);
+      if (editingId !== null) {
+        await updateReview(editingId, text);
+      } else {
+        const reviewId = createdReviewId ?? (await createReview(placeId, text)).id;
+        savedReviewId = reviewId;
+        setCreatedReviewId(reviewId);
+        for (const file of draftPhotos) {
+          await uploadReviewPhoto(reviewId, file);
+          setDraftPhotos(current => current.filter(item => item !== file));
+        }
+      }
       await refresh();
       setBody('');
       setEditingId(null);
+      setCreatedReviewId(null);
     } catch {
-      setError('후기를 저장하지 못했어요. 다시 시도해 주세요.');
+      setError(savedReviewId !== null && editingId === null
+        ? '후기는 저장됐어요. 남은 사진은 다시 눌러 업로드해 주세요.'
+        : '후기를 저장하지 못했어요. 다시 시도해 주세요.');
+      void refresh().catch(() => {});
     } finally { setBusy(false); }
+  }
+
+  function selectDraftPhotos(files: FileList | null) {
+    if (!files?.length) return;
+    const next = Array.from(files);
+    if (draftPhotos.length + next.length > 3 || next.some(file =>
+      !['image/jpeg', 'image/png'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
+      setError('사진은 JPEG/PNG 파일로 최대 3장, 각 5MB 이내로 선택해 주세요.');
+      return;
+    }
+    setError('');
+    setDraftPhotos(current => [...current, ...next]);
   }
 
   async function remove(reviewId: number) {
@@ -112,10 +140,22 @@ function PlaceReviewsForPlace({ placeId }: { placeId: number }) {
       {member ? <div className="outpick-reviewEditor">
         <label htmlFor="review-body">{editingId === null ? '방문 후기 남기기' : '후기 수정하기'}</label>
         <textarea id="review-body" value={body} maxLength={2000} rows={4}
+          disabled={createdReviewId !== null}
           placeholder="이 장소에서 경험한 내용을 적어 주세요." onChange={event => setBody(event.target.value)} />
+        {editingId === null && <div className="outpick-reviewDraftPhotos">
+          <label htmlFor="review-draft-photos">사진 추가 (최대 3장 · JPEG/PNG · 각 5MB 이하)</label>
+          <input id="review-draft-photos" type="file" accept="image/jpeg,image/png" multiple
+            disabled={busy || createdReviewId !== null || draftPhotos.length >= 3}
+            onChange={event => { selectDraftPhotos(event.target.files); event.target.value = ''; }} />
+          {draftPhotos.length > 0 && <ul>{draftPhotos.map((file, index) => <li key={`${file.name}-${index}`}>
+            <span>{file.name}</span>
+            <button type="button" disabled={busy || createdReviewId !== null}
+              onClick={() => setDraftPhotos(current => current.filter((_, position) => position !== index))}>제외</button>
+          </li>)}</ul>}
+        </div>}
         <div className="outpick-reviewEditorActions"><span>{body.length}/2,000</span>
           {editingId !== null && <button type="button" onClick={() => { setEditingId(null); setBody(''); }}>취소</button>}
-          <button type="button" disabled={busy || !body.trim()} onClick={() => void save()}>{busy ? '저장 중...' : editingId === null ? '후기 등록' : '수정 완료'}</button>
+          <button type="button" disabled={busy || (!body.trim() && createdReviewId === null)} onClick={() => void save()}>{busy ? '저장 중...' : createdReviewId !== null ? '사진 업로드 다시 시도' : editingId === null ? '후기 등록' : '수정 완료'}</button>
         </div>
       </div> : memberCheckFailed ? <p className="outpick-reviewLogin">로그인 상태를 확인하지 못했어요. 연결 상태를 확인한 뒤 새로고침해 주세요.</p>
         : <p className="outpick-reviewLogin">후기는 <Link href="/login/">로그인</Link> 후 작성할 수 있어요.</p>}
