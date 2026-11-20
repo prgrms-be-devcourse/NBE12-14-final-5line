@@ -59,25 +59,10 @@ class LocalAdminInitializationTests {
         assertThat(admin.getPasswordHash()).isNotEqualTo(PASSWORD);
         assertThat(passwordEncoder.matches(PASSWORD, admin.getPasswordHash())).isTrue();
 
-        var csrfResult = mvc.perform(get("/api/v1/auth/csrf"))
-                .andExpect(status().isOk())
-                .andReturn();
-        var session = (MockHttpSession) csrfResult.getRequest().getSession(false);
-        var csrf = JsonPath.parse(csrfResult.getResponse().getContentAsString());
-
-        mvc.perform(post("/api/v1/auth/login").session(session)
-                        .header(csrf.<String>read("$.headerName"), csrf.<String>read("$.token"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"%s","password":"%s"}
-                                """.formatted(ADMIN_EMAIL, PASSWORD)))
+        var client = AuthTestClient.create(mvc);
+        client.login(ADMIN_EMAIL, PASSWORD);
+        mvc.perform(client.auth(get("/api/v1/admin/dashboard")))
                 .andExpect(status().isOk());
-
-        var securityContext = (SecurityContext) session.getAttribute(
-                HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
-        assertThat(securityContext.getAuthentication().getAuthorities())
-                .extracting(GrantedAuthority::getAuthority)
-                .containsExactly("ROLE_ADMIN");
     }
 
     @Test

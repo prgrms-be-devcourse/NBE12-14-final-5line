@@ -2,7 +2,7 @@
 services:
   backend:
     environment:
-      SERVER_SERVLET_SESSION_COOKIE_SECURE: "true"
+      AUTH_COOKIE_SECURE: "true"
   nginx:
     ports:
       - "443:443"

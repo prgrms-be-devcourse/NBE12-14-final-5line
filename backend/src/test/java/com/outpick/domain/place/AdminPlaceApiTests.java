@@ -1,5 +1,6 @@
 package com.outpick.domain.place;
 
+import com.outpick.domain.member.AuthTestClient;
 import com.jayway.jsonpath.JsonPath;
 import com.outpick.domain.place.entity.Region;
 import com.outpick.domain.place.repository.RegionRepository;
@@ -43,7 +44,7 @@ class AdminPlaceApiTests {
         long regionId = regions.saveAndFlush(Region.builder().code("ADMIN-TEST").name("관리자 테스트 지역").build()).getId();
         var admin = login("admin@example.com", "12341234");
 
-        mvc.perform(post("/api/v1/admin/places").session(admin.session())
+        mvc.perform(post("/api/v1/admin/places").cookie(admin.cookies())
                         .header(admin.header(), admin.token()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"regionId":%d,"name":"관리자 등록 장소","address":"테스트 주소",
@@ -51,7 +52,7 @@ class AdminPlaceApiTests {
                                 """.formatted(regionId)))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("DRAFT"));
 
-        mvc.perform(get("/api/v1/admin/places").session(admin.session()))
+        mvc.perform(get("/api/v1/admin/places").cookie(admin.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].name").value("관리자 등록 장소"));
         mvc.perform(get("/api/v1/places").param("query", "관리자 등록 장소"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
@@ -62,20 +63,11 @@ class AdminPlaceApiTests {
     void memberCannotUseAdminPlaces() throws Exception {
         var guest = mvc.perform(get("/api/v1/admin/dashboard"));
         guest.andExpect(status().isUnauthorized());
-        var csrf = mvc.perform(get("/api/v1/auth/csrf")).andReturn();
-        var session = (MockHttpSession) csrf.getRequest().getSession(false);
-        var json = JsonPath.parse(csrf.getResponse().getContentAsString());
-        mvc.perform(post("/api/v1/auth/signup").session(session)
-                        .header(json.<String>read("$.headerName"), json.<String>read("$.token"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"place-user@example.com","password":"password123","nickname":"회원"}
-                                """))
-                .andExpect(status().isCreated());
+        AuthTestClient.create(mvc).signup("place-user@example.com", "password123", "회원");
         var member = login("place-user@example.com", "password123");
-        mvc.perform(get("/api/v1/admin/dashboard").session(member.session()))
+        mvc.perform(get("/api/v1/admin/dashboard").cookie(member.cookies()))
                 .andExpect(status().isForbidden());
-        mvc.perform(post("/api/v1/admin/places").session(member.session())
+        mvc.perform(post("/api/v1/admin/places").cookie(member.cookies())
                         .header(member.header(), member.token()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"regionId":1,"name":"허용 안 됨","address":"주소",
@@ -91,26 +83,15 @@ class AdminPlaceApiTests {
         jdbc.update("UPDATE `user` SET role = 'USER' WHERE email = ?", "admin@example.com");
         entityManager.clear();
 
-        mvc.perform(get("/api/v1/admin/dashboard").session(admin.session()))
+        mvc.perform(get("/api/v1/admin/dashboard").cookie(admin.cookies()))
                 .andExpect(status().isForbidden());
-        mvc.perform(get("/api/v1/admin/places").session(admin.session()))
+        mvc.perform(get("/api/v1/admin/places").cookie(admin.cookies()))
                 .andExpect(status().isForbidden());
     }
 
-    private Login login(String email, String password) throws Exception {
-        var csrf = mvc.perform(get("/api/v1/auth/csrf")).andReturn();
-        var session = (MockHttpSession) csrf.getRequest().getSession(false);
-        var json = JsonPath.parse(csrf.getResponse().getContentAsString());
-        String header = json.read("$.headerName");
-        String token = json.read("$.token");
-        mvc.perform(post("/api/v1/auth/login").session(session).header(header, token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"%s","password":"%s"}
-                                """.formatted(email, password)))
-                .andExpect(status().isOk());
-        return new Login(session, header, token);
+    private AuthTestClient login(String email, String password) throws Exception {
+        var client = AuthTestClient.create(mvc);
+        client.login(email, password);
+        return client;
     }
-
-    private record Login(MockHttpSession session, String header, String token) {}
 }

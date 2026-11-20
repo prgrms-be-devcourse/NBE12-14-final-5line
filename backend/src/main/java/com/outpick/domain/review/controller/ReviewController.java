@@ -1,6 +1,6 @@
 package com.outpick.domain.review.controller;
 
-import com.outpick.domain.member.security.MemberSessionPrincipal;
+import com.outpick.domain.member.security.MemberPrincipal;
 import com.outpick.domain.review.dto.ReviewRequest;
 import com.outpick.domain.review.dto.ReportRequest;
 import com.outpick.domain.review.dto.ReviewReportResponse;
@@ -95,6 +95,6 @@ public class ReviewController {
     }
 
     private long memberId(Authentication authentication) {
-        return ((MemberSessionPrincipal) authentication.getPrincipal()).memberId();
+        return ((MemberPrincipal) authentication.getPrincipal()).memberId();
     }
 }

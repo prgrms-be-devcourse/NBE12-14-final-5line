@@ -39,7 +39,8 @@ class FavoriteNotificationMigrationTests {
                     """);
         }
 
-        var flyway = Flyway.configure().dataSource(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword()).load();
+        var flyway = Flyway.configure().dataSource(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
+                .target("14").load();
         assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("14");

@@ -33,7 +33,7 @@ class PlaceStatusMigrationTests {
             statement.executeUpdate("INSERT INTO place_notice(place_id, source_record_id, publish_status) VALUES (1, 1, NULL), (1, 1, 1), (1, 1, 2)");
         }
         var flyway = Flyway.configure().dataSource(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword()).load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(13);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(14);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         try (var connection = DriverManager.getConnection(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
              var statement = connection.createStatement()) {
