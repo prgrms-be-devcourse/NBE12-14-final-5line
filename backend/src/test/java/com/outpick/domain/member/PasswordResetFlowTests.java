@@ -82,14 +82,22 @@ class PasswordResetFlowTests {
                 .allSatisfy(token -> assertThat(token.getTokenHash()).isNotEqualTo(rawToken));
 
         mvc.perform(get("/api/v1/auth/password-reset/validate").param("token", rawToken))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isMethodNotAllowed());
+        mvc.perform(post("/api/v1/auth/password-reset/validate").session(session)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"token\":\"" + rawToken + "\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/auth/password-reset/validate").session(session).header(header, csrf)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"token\":\"" + rawToken + "\"}"))
+                .andExpect(status().isNoContent())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Cache-Control", "no-store"));
         mvc.perform(post("/api/v1/auth/password-reset/confirm").session(session).header(header, csrf)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"token\":\"" + rawToken
                                 + "\",\"newPassword\":\"short\",\"newPasswordConfirmation\":\"short\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
-        mvc.perform(get("/api/v1/auth/password-reset/validate").param("token", rawToken))
+        mvc.perform(post("/api/v1/auth/password-reset/validate").session(session).header(header, csrf)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"token\":\"" + rawToken + "\"}"))
                 .andExpect(status().isNoContent());
         mvc.perform(post("/api/v1/auth/password-reset/confirm").session(session).header(header, csrf)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -98,7 +106,12 @@ class PasswordResetFlowTests {
                 .andExpect(status().isOk());
 
         mvc.perform(get("/api/v1/members/me").session(session)).andExpect(status().isUnauthorized());
-        mvc.perform(get("/api/v1/auth/password-reset/validate").param("token", rawToken))
+        var freshCsrfResponse = mvc.perform(get("/api/v1/auth/csrf")).andExpect(status().isOk()).andReturn();
+        var freshSession = (MockHttpSession) freshCsrfResponse.getRequest().getSession(false);
+        String freshCsrf = com.jayway.jsonpath.JsonPath.read(freshCsrfResponse.getResponse().getContentAsString(), "$.token");
+        String freshHeader = com.jayway.jsonpath.JsonPath.read(freshCsrfResponse.getResponse().getContentAsString(), "$.headerName");
+        mvc.perform(post("/api/v1/auth/password-reset/validate").session(freshSession).header(freshHeader, freshCsrf)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"token\":\"" + rawToken + "\"}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("RESET_LINK_INVALID"));
         assertThatThrownBy(() -> memberService.authenticate("reset@example.com", "old-pass"))
                 .isInstanceOf(BusinessException.class);

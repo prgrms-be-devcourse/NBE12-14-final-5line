@@ -39,7 +39,7 @@ export async function requestPasswordReset(email: string): Promise<string> {
 }
 
 export async function validatePasswordReset(token: string): Promise<void> {
-  await apiClient.get(`${authPath}/password-reset/validate`, { params: { token } });
+  await apiClient.post(`${authPath}/password-reset/validate`, { token }, { headers: await csrfHeader() });
 }
 
 export async function confirmPasswordReset(input: ResetConfirmInput): Promise<string> {

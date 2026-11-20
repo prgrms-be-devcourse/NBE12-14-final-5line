@@ -35,8 +35,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/password-reset/request", "/api/v1/auth/password-reset/confirm").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/password-reset/validate").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/password-reset/request", "/api/v1/auth/password-reset/validate", "/api/v1/auth/password-reset/confirm").permitAll()
+                        .requestMatchers("/api/v1/auth/password-reset/validate").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/places", "/api/v1/places/filters", "/api/v1/places/{placeId}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/places/{placeId}/reviews").permitAll()
