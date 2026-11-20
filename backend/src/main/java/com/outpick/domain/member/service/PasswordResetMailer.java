@@ -22,7 +22,8 @@ public class PasswordResetMailer {
     }
 
     public void send(PasswordResetService.ResetMail reset) {
-        String link = frontendBaseUrl.replaceAll("/+$", "") + "/reset-password?token="
+        // Fragment는 웹 서버로 전송되지 않아 토큰이 접속 로그의 URL에 남지 않습니다.
+        String link = frontendBaseUrl.replaceAll("/+$", "") + "/reset-password/#token="
                 + URLEncoder.encode(reset.token(), StandardCharsets.UTF_8);
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);

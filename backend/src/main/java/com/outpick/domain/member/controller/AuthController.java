@@ -4,7 +4,11 @@ import com.outpick.domain.member.dto.LoginRequest;
 import com.outpick.domain.member.dto.MemberResponse;
 import com.outpick.domain.member.dto.SignupRequest;
 import com.outpick.domain.member.dto.SignupResponse;
+import com.outpick.domain.member.entity.Member;
 import com.outpick.domain.member.service.MemberService;
+import com.outpick.domain.member.service.LoginAttemptLimiter;
+import com.outpick.domain.member.exception.MemberErrorCode;
+import com.outpick.global.error.BusinessException;
 import com.outpick.domain.member.security.MemberSessionPrincipal;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -30,10 +34,13 @@ public class AuthController {
 
     private final MemberService memberService;
     private final SecurityContextRepository securityContextRepository;
+    private final LoginAttemptLimiter loginAttemptLimiter;
 
-    public AuthController(MemberService memberService, SecurityContextRepository securityContextRepository) {
+    public AuthController(MemberService memberService, SecurityContextRepository securityContextRepository,
+                          LoginAttemptLimiter loginAttemptLimiter) {
         this.memberService = memberService;
         this.securityContextRepository = securityContextRepository;
+        this.loginAttemptLimiter = loginAttemptLimiter;
     }
 
     @GetMapping("/csrf")
@@ -50,7 +57,10 @@ public class AuthController {
     @PostMapping("/login")
     public MemberResponse login(@Valid @RequestBody LoginRequest login,
                                 HttpServletRequest request, HttpServletResponse response) {
-        var member = memberService.authenticate(login.email(), login.password());
+        String attemptKey = loginAttemptLimiter.key(login.email(), request.getRemoteAddr());
+        loginAttemptLimiter.requireAllowed(attemptKey);
+        var member = authenticate(login, attemptKey);
+        loginAttemptLimiter.clear(attemptKey);
         if (request.getSession(false) != null) {
             request.changeSessionId();
         }
@@ -62,5 +72,16 @@ public class AuthController {
         SecurityContextHolder.setContext(context);
         securityContextRepository.saveContext(context, request, response);
         return MemberResponse.from(member);
+    }
+
+    private Member authenticate(LoginRequest login, String attemptKey) {
+        try {
+            return memberService.authenticate(login.email(), login.password());
+        } catch (BusinessException error) {
+            if (error.getErrorCode().code().equals(MemberErrorCode.INVALID_CREDENTIALS.name())) {
+                loginAttemptLimiter.recordFailure(attemptKey);
+            }
+            throw error;
+        }
     }
 }
