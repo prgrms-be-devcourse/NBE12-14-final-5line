@@ -100,6 +100,17 @@ V7 마이그레이션은 수집 이력/잠금 테이블을 추가한다. 기존 
 
 `scripts/review-initial-place-filters.sql`을 로컬에서 별도로 실행한다. 수집 시 기본값을 바꾸거나 Flyway에 장소 데이터를 넣지 않는다. 시즌은 현재 영업 여부나 방문일 예약 가능 여부가 아닌 종목별 탐색 분류다. 월별 기간을 변환할 때 봄 3~5월, 여름 6~8월, 가을 9~11월, 겨울 12~2월을 사용했다.
 
+추가 공식 검수분은 `backend/scripts/review-place-filters-20261123.sql`에서 관리한다. 로컬에서 해당 SQL을 먼저 적용하면 이름 기반 후보 생성 시 검수된 항목을 그대로 사용한다.
+
+저장소 루트에서 아래 명령을 실행하면 수집 대상 전체의 현재 분류, 후보, 확인이 남은 항목을 CSV로 남긴다. 출력 경로는 새 파일이어야 한다.
+
+```bash
+node backend/scripts/classify-tour-place-filters.mjs filter-candidates.csv
+node backend/scripts/classify-tour-place-filters.mjs filter-applied.csv --apply
+```
+
+`--apply`는 로컬 Compose MySQL에 반영한다. 장소명에 명시된 종목과 실내외 값만 사용하고 이름 기반 출처를 기록한다. 기존 값과 시즌은 유지하며, 장소명과 활동 유형을 정확히 연결할 수 없는 행은 보류한다. CSV의 홈페이지는 후속 확인에 사용할 후보 링크다.
+
 - 웨이브파크 **서핑**: 실외, 봄·여름·가을. [서핑 시설 안내](https://www.wavepark.co.kr/surf)를 근거로 실외로 분류하고, [2026 운영기간 4월 25일~10월 31일](https://www.wavepark.co.kr/operatinghours)을 세 계절에 대응시켰다. [10월 31일 서프존 시즌 종료](https://www.wavepark.co.kr/board/notice?act=view/detail/95)도 확인했다. 겨울 운영이나 2027 일정은 추정하지 않았다. 다음 시즌 공지 시 재검토해야 한다.
 - 곤지암 **스키와 스노보드 각각**: 실외, 겨울. [공식 겨울 스키장·설원·슬로프 및 스키/보드 안내](https://m.konjiamresort.co.kr/ski/skiGuide.dev)를 근거로 분류했다. 정확한 개장·폐장일이나 봄 연장 운영은 별도로 확인하지 않았다. 리조트의 여름 시설은 이 두 종목의 시즌에 적용하지 않는다.
 - 부산 **루지**: 실외, 봄·여름·가을·겨울. [공식 다운힐 트랙·스카이라이드 안내](https://busan.skylineluge.kr/en/)로 실외로 분류했다. [공식 연중 멤버십과 매일 루지 이용 혜택](https://busan.skylineluge.kr/en/membership/)을 근거로 사계절로 분류했다. 날씨나 임시 휴장 예외까지 보장하는 값은 아니다.
