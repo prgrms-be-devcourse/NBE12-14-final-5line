@@ -16,7 +16,13 @@ public class TourApiOperatingClient {
             var response = mapper.readTree(raw).path("response");
             String code = response.path("header").path("resultCode").asString("");
             if (!"0000".equals(code) && !"00".equals(code)) throw invalid();
-            var item = response.path("body").path("items").path("item");
+            var body = response.path("body");
+            var items = body.path("items");
+            // 정상 성공 응답의 명시적인 0건만 미제공으로 인정한다. 누락/손상 응답은 오류다.
+            if ("0".equals(body.path("totalCount").asString(""))
+                    && ("".equals(items.asString(null)) || (items.isArray() && items.size() == 0)))
+                throw new TourApiException(TourApiException.Reason.NO_DATA);
+            var item = items.path("item");
             if (item.isArray()) {
                 if (item.size() != 1) throw invalid();
                 item = item.path(0);
@@ -26,9 +32,11 @@ public class TourApiOperatingClient {
             String hours = text(item, "usetimeleports", 10000);
             String rest = text(item, "restdateleports", 10000);
             String phone = text(item, "infocenterleports", 100);
-            if (hours == null && rest == null && phone == null) throw invalid();
+            if (hours == null && rest == null && phone == null)
+                throw new TourApiException(TourApiException.Reason.NO_DATA);
             return new TourOperatingSnapshot(contentId, hours, rest, phone);
-        } catch (RuntimeException exception) { throw invalid(); }
+        } catch (TourApiException exception) { throw exception; }
+        catch (RuntimeException exception) { throw invalid(); }
     }
 
     private String text(JsonNode item, String name, int max) {

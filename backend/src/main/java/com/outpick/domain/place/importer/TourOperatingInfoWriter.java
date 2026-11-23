@@ -9,12 +9,27 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Repository
 @RequiredArgsConstructor
 public class TourOperatingInfoWriter {
     private final EntityManager em;
     private final Clock placeClock;
+
+    /** 기본키로 다음 페이지를 읽는다. HTTP 호출 전에 읽기 트랜잭션이 끝난다. */
+    @Transactional(readOnly = true)
+    public List<String> findContentIdsAfter(String after, int limit) {
+        if (limit < 1 || limit > 100) throw new IllegalArgumentException("페이지 크기는 1~100입니다.");
+        return em.createQuery("select i.contentId from TourApiImportRecord i where i.contentId > :after order by i.contentId", String.class)
+                .setParameter("after", after).setMaxResults(limit).getResultList();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasOperatingInfo(String contentId) {
+        var imported = em.find(TourApiImportRecord.class, contentId);
+        return imported != null && em.find(PlaceOperatingInfo.class, imported.getPlaceId()) != null;
+    }
 
     @Transactional
     public String saveInitial(TourOperatingSnapshot snapshot) {

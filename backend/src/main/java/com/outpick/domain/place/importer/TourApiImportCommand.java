@@ -1,16 +1,13 @@
 package com.outpick.domain.place.importer;
 
 import com.outpick.BackendApplication;
-import org.springframework.boot.WebApplicationType;
-import org.springframework.boot.builder.SpringApplicationBuilder;
 
 /** 일반 서버와 분리된 일회성 로컬 명령. 웹 서버를 열지 않고 처리 후 종료한다. */
 public class TourApiImportCommand {
     public static void main(String[] args) {
         var transport = new TourApiHttpTransport(System.getenv("TOUR_API_KEY"));
         boolean failed;
-        try (var context = new SpringApplicationBuilder(BackendApplication.class)
-                .web(WebApplicationType.NONE).run("--spring.profiles.active=local")) {
+        try (var context = TourImportApplication.builder(BackendApplication.class).run()) {
             var service = new TourApiImportService(new TourApiClient(transport), new TourApiNormalizer(),
                     context.getBean(TourImportWriter.class));
             var results = service.importPlaces(TourImportTarget.initialPlaces());

@@ -8,6 +8,26 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.*;
 
 class TourApiOperatingClientTests {
+    @Test
+    @DisplayName("성공 응답의 명시적인 결과 0건은 미제공으로 구분하고 손상 응답은 오류로 유지한다")
+    void distinguishesExplicitZeroResultsFromMalformedBody() {
+        var empty = "{\"response\":{\"header\":{\"resultCode\":\"0000\"},\"body\":{\"totalCount\":0,\"items\":\"\"}}}";
+        assertThatThrownBy(() -> new TourApiOperatingClient(id -> empty).getOperatingInfo("1"))
+                .isInstanceOfSatisfying(TourApiException.class,
+                        exception -> assertThat(exception.getReason()).isEqualTo(TourApiException.Reason.NO_DATA));
+        var malformed = "{\"response\":{\"header\":{\"resultCode\":\"0000\"},\"body\":{}}}";
+        assertThatThrownBy(() -> new TourApiOperatingClient(id -> malformed).getOperatingInfo("1"))
+                .isInstanceOfSatisfying(TourApiException.class,
+                        exception -> assertThat(exception.getReason()).isEqualTo(TourApiException.Reason.INVALID_RESPONSE));
+    }
+    @Test
+    @DisplayName("정상 대상의 운영 항목이 모두 비면 응답 오류와 구분해 미제공으로 처리한다")
+    void distinguishesNoDataFromInvalidResponse() {
+        assertThatThrownBy(() -> new TourApiOperatingClient(id -> response(
+                Map.of("contentid", "1", "contenttypeid", "28"), true)).getOperatingInfo("1"))
+                .isInstanceOfSatisfying(TourApiException.class,
+                        exception -> assertThat(exception.getReason()).isEqualTo(TourApiException.Reason.NO_DATA));
+    }
     private String response(Map<String, String> item, boolean array) {
         return JsonMapper.builder().build().writeValueAsString(Map.of("response", Map.of("header", Map.of("resultCode", "0000"),
                 "body", Map.of("items", Map.of("item", array ? List.of(item) : item)))));

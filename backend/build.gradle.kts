@@ -55,7 +55,7 @@ springBoot {
 
 tasks.register<JavaExec>("importPlaceOperatingInfo") {
 	group = "application"
-	description = "플라이스테이션 운영 안내를 로컬 DB에 미검수 참고정보로 최초 수집합니다."
+	description = "DB의 TourAPI 장소에 운영 안내를 최초 수집합니다. 기존 안내는 보존합니다."
 	classpath = sourceSets.main.get().runtimeClasspath
 	mainClass = "com.outpick.domain.place.importer.TourOperatingInfoCommand"
 	systemProperty("spring.devtools.restart.enabled", "false")
