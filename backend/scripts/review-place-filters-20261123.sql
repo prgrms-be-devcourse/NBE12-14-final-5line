@@ -3,7 +3,7 @@
 SET NAMES utf8mb4;
 
 CREATE TEMPORARY TABLE filter_review (
-    content_id VARCHAR(50) PRIMARY KEY,
+    content_id VARCHAR(50) NOT NULL,
     place_name VARCHAR(50) NOT NULL,
     category_name VARCHAR(50) NOT NULL,
     activity_name VARCHAR(50) NOT NULL,
@@ -11,8 +11,9 @@ CREATE TEMPORARY TABLE filter_review (
     environment_type VARCHAR(10) NOT NULL,
     seasons JSON NOT NULL,
     environment_source VARCHAR(100) NOT NULL,
-    season_source VARCHAR(100) NOT NULL,
-    evidence TEXT NOT NULL
+    season_source VARCHAR(100),
+    evidence TEXT NOT NULL,
+    PRIMARY KEY (content_id, category_name, activity_name)
 );
 
 INSERT INTO filter_review VALUES
@@ -35,7 +36,34 @@ INSERT INTO filter_review VALUES
  JSON_ARRAY('SPRING', 'AUTUMN', 'WINTER'),
  'https://www.railpark.co.kr/course/gapyeong/intro',
  'https://www.railpark.co.kr/course/gapyeong/schedule',
- '운영사 코스 안내에서 레일바이크와 야외 철교 구간 확인. 운행 안내의 5월과 10월 성수기 및 1월까지의 할인 안내를 계절 분류 근거로 사용함. 여름은 추가 확인 대상.');
+ '운영사 코스 안내에서 레일바이크와 야외 철교 구간 확인. 운행 안내의 5월과 10월 성수기 및 1월까지의 할인 안내를 계절 분류 근거로 사용함. 여름은 추가 확인 대상.'),
+('131723', '지산 포레스트 리조트 스키장', '스키·보드', '스키', FALSE, 'OUTDOOR',
+ JSON_ARRAY('WINTER'), 'https://www.jisanresort.co.kr/m/guide/ski_intro.asp',
+ 'https://www.jisanresort.co.kr/m/guide/ski_intro.asp',
+ '운영사가 겨울철 설원 슬로프에서 스키와 보드를 이용하는 시설로 안내함.'),
+('131723', '지산 포레스트 리조트 스키장', '스키·보드', '스노보드', FALSE, 'OUTDOOR',
+ JSON_ARRAY('WINTER'), 'https://www.jisanresort.co.kr/m/guide/ski_intro.asp',
+ 'https://www.jisanresort.co.kr/m/guide/ski_intro.asp',
+ '운영사가 겨울철 설원 슬로프에서 스키와 보드를 이용하는 시설로 안내함.'),
+('131317', '한강시민공원 여의도수영장(실외)', '수상', '수영', FALSE, 'OUTDOOR',
+ JSON_ARRAY('SUMMER'), 'https://hangang.seoul.go.kr/www/contents/814.do?mid=622',
+ 'https://hangang.seoul.go.kr/www/eventMng/detail.do?evntSn=432&mid=538',
+ '서울시 야외수영장 안내와 2026년 6~8월 개장 공지로 여름 분류.'),
+('775883', '한강시민공원 뚝섬수영장(실외)', '수상', '수영', FALSE, 'OUTDOOR',
+ JSON_ARRAY('SUMMER'), 'https://hangang.seoul.go.kr/www/contents/814.do?mid=622',
+ 'https://hangang.seoul.go.kr/www/eventMng/detail.do?evntSn=432&mid=538',
+ '서울시 야외수영장 안내와 2026년 6~8월 개장 공지로 여름 분류.'),
+('1148818', '한강공원 뚝섬 눈썰매장', '체험', '눈썰매', FALSE, 'OUTDOOR',
+ JSON_ARRAY('WINTER'), 'https://hangang.seoul.go.kr/www/contents/654.do?mid=449',
+ 'https://hangang.seoul.go.kr/www/contents/757.do?mid=50',
+ '서울시가 뚝섬 야외수영장 내 겨울 눈썰매장으로 안내함.'),
+('3032546', '경주루지월드', '체험', '루지', FALSE, 'OUTDOOR',
+ JSON_ARRAY('SPRING', 'SUMMER', 'AUTUMN', 'WINTER'), 'https://gyeongju-luge.kr/Luge',
+ 'https://gyeongju-luge.kr/',
+ '운영사가 경사지에 조성한 루지 코스와 사계절 이용을 안내함.'),
+('2488148', '스카이라인 루지 통영', '체험', '루지', FALSE, 'OUTDOOR',
+ JSON_ARRAY(), 'https://tongyeong.skylineluge.kr/en/visiting-us/faqs/', NULL,
+ '운영사의 체어리프트 및 우천과 강풍 시 운행 안내로 실외 확인. 시즌은 보류.');
 
 START TRANSACTION;
 SELECT lock_id FROM tour_api_import_lock WHERE lock_id = 1 FOR UPDATE;
