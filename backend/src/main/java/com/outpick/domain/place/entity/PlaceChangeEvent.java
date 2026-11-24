@@ -46,4 +46,9 @@ public class PlaceChangeEvent {
         this.notice = Objects.requireNonNull(notice, "notice");
         this.eligibleAt = Objects.requireNonNull(eligibleAt, "eligibleAt");
     }
+
+    public void complete(LocalDateTime processedAt) {
+        this.processedAt = Objects.requireNonNull(processedAt, "processedAt");
+        this.taskStatus = PlaceChangeEventStatus.COMPLETED;
+    }
 }
