@@ -47,6 +47,8 @@ dependencies {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+	// 통합 테스트에서 DB 컨테이너의 실행 주기에 맞춰 알림 작업을 직접 호출한다.
+	systemProperty("outpick.notifications.poll-delay", "1d")
 }
 
 springBoot {

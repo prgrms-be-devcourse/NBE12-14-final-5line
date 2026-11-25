@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '../../../../../../../tests/setup-dom';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../../../../../../tests/mocks/server';
@@ -33,6 +33,32 @@ describe('DB 장소 상세 화면',()=>{
     window.history.replaceState(null,'','/places/detail/?'+new URLSearchParams({id:'1',returnTo:'/?region=강원&lat=37&lng=128&level=8'}));
     mount(); await screen.findByRole('heading',{name:'DB 장소'});
     expect(new URL(screen.getByRole('link',{name:'← 장소 목록으로 돌아가기'}).getAttribute('href')!,window.location.origin).searchParams.get('level')).toBe('8');
+  });
+  it('알림에서 진입하면 운영 공지 영역을 중앙에 배치하고 이후 공지는 해당 제목으로 이동한다', async () => {
+    const scroll = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: scroll });
+    try {
+      server.use(http.get(base + '/1', () => HttpResponse.json({
+        ...body,
+        notices: [...body.notices, { placeNoticeId: 31, title: '두 번째 공지', content: '다른 공지 본문', sourceRecordId: 40 }],
+      })));
+      window.history.replaceState(null, '', '/places/detail/?id=1#place-notice-30');
+      mount();
+      const sectionHeading = await screen.findByRole('heading', { name: '운영 공지' });
+      const heading = await screen.findByRole('heading', { name: '확인된 공지' });
+      expect(heading.closest('article')?.getAttribute('data-place-notice-id')).toBe('30');
+      expect(document.getElementById('place-notice-30')).toBeNull();
+      await waitFor(() => expect(scroll.mock.instances[0]).toBe(sectionHeading));
+      expect(scroll).toHaveBeenLastCalledWith({ block: 'center' });
+      window.history.replaceState(null, '', '/places/detail/?id=1#place-notice-31');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      expect(scroll.mock.instances[1]).toBe(screen.getByRole('heading', { name: '두 번째 공지' }));
+      window.history.replaceState(null, '', '/places/detail/?id=1#place-notice-999');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      expect(scroll.mock.instances[2]).toBe(sectionHeading);
+    } finally {
+      Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+    }
   });
   it('404는 찾을 수 없음으로 안내한다',async()=>{
     server.use(http.get(base+'/1',()=>new HttpResponse(null,{status:404}))); mount();

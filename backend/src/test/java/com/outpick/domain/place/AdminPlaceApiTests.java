@@ -17,10 +17,16 @@ import com.outpick.domain.place.repository.SourceRecordRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
@@ -34,7 +40,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -51,9 +59,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
 @AutoConfigureMockMvc
+@Import(AdminPlaceApiTests.TestTime.class)
 @Testcontainers
 @Transactional
 class AdminPlaceApiTests {
+    private static final LocalDateTime PUBLISHED_AT = LocalDateTime.parse("2026-11-24T10:00:00.123456");
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class TestTime {
+        @Bean
+        @Primary
+        Clock fixedPlaceClock() {
+            var seoul = ZoneId.of("Asia/Seoul");
+            return Clock.fixed(PUBLISHED_AT.atZone(seoul).toInstant(), seoul);
+        }
+    }
+
     @Container @ServiceConnection
     static MySQLContainer mysql = new MySQLContainer("mysql:8.4.13");
 
@@ -366,6 +387,7 @@ class AdminPlaceApiTests {
                 """, draft.getId());
         long eventId = ((Number) event.get("place_change_event_id")).longValue();
         assertThat(event).containsEntry("task_status", "PENDING").containsEntry("processed_at", null);
+        assertThat(eventEligibleAt(draft.getId())).isEqualTo(PUBLISHED_AT);
         mvc.perform(get("/api/v1/places/{id}", place.getId()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.notices[0].title").value("처음 공개한 공지"));
 
@@ -389,8 +411,31 @@ class AdminPlaceApiTests {
         mvc.perform(get("/api/v1/places/{id}", place.getId()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.notices[0].title").value("수정한 공개 공지"));
         assertThat(eventIds(draft.getId())).containsExactly(eventId);
+        assertThat(eventEligibleAt(draft.getId())).isEqualTo(PUBLISHED_AT);
         assertThat(jdbc.queryForObject("SELECT task_status FROM place_change_event WHERE place_change_event_id = ?",
                 String.class, eventId)).isEqualTo("COMPLETED");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "2026-11-24T09:00:00, 2026-11-24T10:00:00.123456",
+            "2026-11-24T11:00:00, 2026-11-24T11:00:00"
+    })
+    @DisplayName("공지 최초 공개 시 유효기간 시작일과 공개 시각 중 늦은 시각을 저장한다")
+    void firstPublicationUsesTheLaterEligibleTime(String validFrom, String expectedEligibleAt) throws Exception {
+        var place = publishedPlace("알림 기준 시각 검사 장소");
+        var source = sourceFor(place);
+        var draft = saveNotice(place, source, "저장된 초안", PlacePublishStatus.DRAFT);
+        var admin = login("admin@example.com", "12341234");
+
+        mvc.perform(patch(noticePath(place.getId()) + "/" + draft.getId()).param("publish", "true")
+                        .session(admin.session()).header(admin.header(), admin.token()).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"공지","content":"본문","sourceRecordId":%d,"validFrom":"%s"}
+                                """.formatted(source.getId(), validFrom)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.publishStatus").value("PUBLISHED"));
+
+        assertThat(eventEligibleAt(draft.getId())).isEqualTo(LocalDateTime.parse(expectedEligibleAt));
     }
 
     @Test
@@ -466,6 +511,7 @@ class AdminPlaceApiTests {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM source_record WHERE place_id = ?", Long.class, place.getId()))
                 .isEqualTo(1L);
         assertThat(eventIds(draft.getId())).hasSize(1);
+        assertThat(eventEligibleAt(draft.getId())).isNull();
     }
 
     @Test
@@ -580,6 +626,10 @@ class AdminPlaceApiTests {
 
     private List<Long> eventIds(long noticeId) {
         return jdbc.queryForList("SELECT place_change_event_id FROM place_change_event WHERE place_notice_id = ?", Long.class, noticeId);
+    }
+
+    private LocalDateTime eventEligibleAt(long noticeId) {
+        return jdbc.queryForObject("SELECT eligible_at FROM place_change_event WHERE place_notice_id = ?", LocalDateTime.class, noticeId);
     }
 
     private Place publishedPlace(String name) {

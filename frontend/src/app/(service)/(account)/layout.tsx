@@ -13,7 +13,7 @@ export default function AccountLayout({ children }: { children: ReactNode }) {
       ? 'mx-auto grid max-w-7xl items-start gap-6 px-4 py-6 md:grid-cols-[12rem_minmax(0,1fr)] md:px-6 lg:gap-8 lg:px-9 lg:py-9'
       : undefined}
     >
-      {showSidebar && <AccountSidebar role={member.role} />}
+      {showSidebar && <AccountSidebar member={member} />}
       <main className="min-w-0">{children}</main>
     </div>
   );

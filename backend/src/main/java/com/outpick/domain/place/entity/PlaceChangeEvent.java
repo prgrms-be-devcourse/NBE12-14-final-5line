@@ -36,10 +36,19 @@ public class PlaceChangeEvent {
     @Column(name = "task_status", nullable = false, length = 20)
     private PlaceChangeEventStatus taskStatus = PlaceChangeEventStatus.PENDING;
 
+    @Column(name = "eligible_at", columnDefinition = "DATETIME(6)")
+    private LocalDateTime eligibleAt;
+
     @Column(name = "processed_at", columnDefinition = "DATETIME")
     private LocalDateTime processedAt;
 
-    public PlaceChangeEvent(PlaceNotice notice) {
+    public PlaceChangeEvent(PlaceNotice notice, LocalDateTime eligibleAt) {
         this.notice = Objects.requireNonNull(notice, "notice");
+        this.eligibleAt = Objects.requireNonNull(eligibleAt, "eligibleAt");
+    }
+
+    public void complete(LocalDateTime processedAt) {
+        this.processedAt = Objects.requireNonNull(processedAt, "processedAt");
+        this.taskStatus = PlaceChangeEventStatus.COMPLETED;
     }
 }

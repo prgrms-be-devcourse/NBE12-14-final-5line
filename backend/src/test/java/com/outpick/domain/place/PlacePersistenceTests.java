@@ -61,7 +61,7 @@ class PlacePersistenceTests {
         assertThat(jdbc.queryForList("SHOW TABLES", String.class)).contains(
                 "region", "activity_category", "activity_type", "place", "place_activity",
                 "place_activity_season", "source_record", "place_notice", "favorite", "review", "review_report",
-                "media_asset", "review_image", "review_image_data", "review_media");
+                "media_asset", "review_image", "review_image_data", "review_media", "place_change_event", "notification");
         // 두 번째 migrate는 기존 스키마와 데이터를 다시 생성하지 않는다.
         assertThat(flyway.migrate().migrationsExecuted).isZero();
     }

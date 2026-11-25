@@ -23,6 +23,8 @@ import com.outpick.domain.place.repository.RegionRepository;
 import com.outpick.domain.place.repository.SourceRecordRepository;
 import com.outpick.domain.review.repository.ReviewReportRepository;
 import com.outpick.global.error.BusinessException;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -45,6 +47,7 @@ public class AdminPlaceService {
     private final PlaceNoticeRepository notices;
     private final SourceRecordRepository sources;
     private final PlaceChangeEventRepository changeEvents;
+    private final Clock placeClock;
     private final PlaceDetailRepository details;
 
     public Map<String, Long> summary(long memberId) {
@@ -181,16 +184,19 @@ public class AdminPlaceService {
             throw new BusinessException(PlaceErrorCode.PLACE_NOTICE_PLACE_NOT_PUBLISHED.getErrorCode());
         }
         requireVerifiedSource(notice.getSourceRecord());
+        var validFrom = notice.getValidFrom();
         if (notice.getTitle() == null || notice.getTitle().isBlank()
                 || notice.getContent() == null || notice.getContent().isBlank()
-                || (notice.getValidFrom() != null && notice.getValidUntil() != null
-                    && !notice.getValidFrom().isBefore(notice.getValidUntil()))) {
+                || (validFrom != null && notice.getValidUntil() != null
+                    && !validFrom.isBefore(notice.getValidUntil()))) {
             throw new BusinessException(PlaceErrorCode.PLACE_NOTICE_INCOMPLETE.getErrorCode());
         }
         var firstPublication = notice.getPublishStatus() == PlacePublishStatus.DRAFT;
         notice.publish();
         if (firstPublication) {
-            changeEvents.save(new PlaceChangeEvent(notice));
+            var publishedAt = LocalDateTime.now(placeClock);
+            var eligibleAt = validFrom != null && validFrom.isAfter(publishedAt) ? validFrom : publishedAt;
+            changeEvents.save(new PlaceChangeEvent(notice, eligibleAt));
         }
     }
 
