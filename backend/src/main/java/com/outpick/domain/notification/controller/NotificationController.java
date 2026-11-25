@@ -26,9 +26,10 @@ public class NotificationController {
     public NotificationPageResponse findMyNotifications(
             @RequestParam(defaultValue = "0") @Min(0) @Max(1_000_000) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size,
+            @RequestParam(defaultValue = "false") boolean unreadOnly,
             Authentication authentication) {
         var principal = (MemberSessionPrincipal) authentication.getPrincipal();
-        return notificationInboxService.findMyNotifications(principal.memberId(), page, size);
+        return notificationInboxService.findMyNotifications(principal.memberId(), page, size, unreadOnly);
     }
 
     @PatchMapping("/{notificationId}/read")

@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { useEffect } from 'react';
 import PlacePhoto, { PlacePhotoCredit, getPlacePhoto } from '@/domains/place/components/PlacePhoto/PlacePhoto';
 import CopyPlaceLinkButton from '@/domains/place/components/CopyPlaceLinkButton/CopyPlaceLinkButton';
 import { usePlaceDetail } from '@/domains/place/hooks/usePlaces';
 import { environmentLabel, seasonLabel } from '@/domains/place/api/placeApi';
 import { safeHttpUrl } from '@/domains/place/lib/placeLinks';
 import { ApiError } from '@/shared/lib/http/apiError';
-import { getListReturnUrl } from '@/domains/place/lib/placeNavigation';
+import { getListReturnUrl, scrollToPlaceNotice } from '@/domains/place/lib/placeNavigation';
 import PlaceReviews from '@/domains/review/components/PlaceReviews/PlaceReviews';
 import FavoritePlaceButton from '../FavoritePlaceButton';
 import OperatingInfoPanel, { placeFactsClassName } from '../OperatingInfoPanel/OperatingInfoPanel';
@@ -32,6 +33,15 @@ export default function PlaceDetail() {
   const missing = !validId || failure?.kind === 'http' && failure.status === 404;
   const homepage = safeHttpUrl(place?.homepage ?? null);
   const returnUrl = getListReturnUrl(params.get('returnTo'));
+  const search = params.toString();
+
+  useEffect(() => {
+    if (!place?.notices) return;
+
+    scrollToPlaceNotice();
+    window.addEventListener('hashchange', scrollToPlaceNotice);
+    return () => window.removeEventListener('hashchange', scrollToPlaceNotice);
+  }, [search, place?.notices]);
 
   return (
     <div className="[&_a:focus-visible]:outline-3 [&_a:focus-visible]:outline-offset-4 [&_a:focus-visible]:outline-[#5147ff]">
@@ -86,7 +96,13 @@ export default function PlaceDetail() {
                 </section>
                 <section className={sectionClassName} aria-labelledby="place-notices">
                   <h2 className={sectionHeadingClassName} id="place-notices">운영 공지</h2>
-                  {place.notices.length ? place.notices.map(notice => <article className="mt-3 rounded-lg border border-[#e9edf3] p-4 text-[13px]" key={notice.placeNoticeId}><h3 className="font-bold">{notice.title ?? '공지'}</h3><p className="mt-2 leading-[1.8] whitespace-pre-wrap text-[#718096]">{notice.content}</p></article>) : <p>등록된 운영 공지가 없습니다.</p>}
+                  {place.notices.length ? place.notices.map(notice => (
+                    <article className="mt-3 rounded-lg border border-[#e9edf3] p-4 text-[13px]"
+                      data-place-notice-id={notice.placeNoticeId} key={notice.placeNoticeId}>
+                      <h3 className="font-bold">{notice.title ?? '공지'}</h3>
+                      <p className="mt-2 leading-[1.8] whitespace-pre-wrap text-[#718096]">{notice.content}</p>
+                    </article>
+                  )) : <p>등록된 운영 공지가 없습니다.</p>}
                 </section>
                 <section className={sectionClassName} aria-labelledby="place-sources">
                   <h2 className={sectionHeadingClassName} id="place-sources">정보 출처 및 확인일</h2>

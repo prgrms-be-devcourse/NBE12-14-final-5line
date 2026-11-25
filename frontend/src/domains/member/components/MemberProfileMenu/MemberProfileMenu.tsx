@@ -3,6 +3,7 @@
 import { CircleUserRound } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
+import NotificationMenu from '@/domains/notification/components/NotificationMenu';
 import { useCurrentMember } from '../../hooks/useCurrentMember';
 import { memberShortcutItems } from '../../navigation/accountNavigationItems';
 import { profileMenuItems, type ProfileMenuAudience } from './profileMenuItems';
@@ -43,6 +44,7 @@ export default function MemberProfileMenu() {
           <Icon size={22} strokeWidth={1.8} aria-hidden="true" />
         </Link>
       ))}
+      {memberStatus === 'member' && member && <NotificationMenu key={member.id} memberId={member.id} iconClassName={iconClassName} />}
       <div
         className="relative"
         ref={menuRef}

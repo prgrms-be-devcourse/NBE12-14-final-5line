@@ -3,14 +3,15 @@
 import '../../../../../tests/setup-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createQueryClient } from '@/shared/lib/query/queryClient';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../tests/mocks/server';
 import MemberProfileMenu from './MemberProfileMenu';
 
 const memberUrl = 'https://api.outpick.test/api/v1/members/me';
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 function renderMenu(children?: React.ReactNode) {
   render(
@@ -49,7 +50,7 @@ describe('탐색 화면의 프로필 메뉴', () => {
 
     const favorite = await screen.findByRole('link', { name: '관심 장소' });
     expect(favorite.getAttribute('href')).toMatch(/^\/mypage\/favorites\/?$/);
-    expect(screen.getByRole('link', { name: '알림함' }).getAttribute('href')).toMatch(/^\/mypage\/notifications\/?$/);
+    expect(screen.getByRole('button', { name: '알림함' }).getAttribute('aria-haspopup')).toBe('dialog');
 
     const button = screen.getByRole('button', { name: '프로필 메뉴' });
     await user.click(button);
@@ -58,6 +59,57 @@ describe('탐색 화면의 프로필 메뉴', () => {
     expect([...menu?.querySelectorAll('a') ?? []].map(link => [
       link.textContent, link.getAttribute('href')?.replace(/\/$/, ''),
     ])).toEqual([['마이페이지', '/mypage'], ['내 제보 상태', '/mypage/place-reports']]);
+  });
+
+  it('알림 버튼은 현재 화면에서 미읽음 모달을 열고 읽은 항목을 제거한다', async () => {
+    const modal = HTMLDialogElement.prototype;
+    Object.defineProperties(modal, {
+      showModal: { configurable: true, value(this: HTMLDialogElement) { this.open = true; } },
+      close: { configurable: true, value(this: HTMLDialogElement) {
+        this.open = false;
+        this.dispatchEvent(new Event('close'));
+      } },
+    });
+    try {
+      const inboxUrl = `${memberUrl}/notifications`;
+      const readAt = '2026-11-25T11:08:00';
+      const notice = {
+        notificationId: 101, eventId: 21, placeId: 7, placeNoticeId: 34,
+        title: '휴무 안내', createdAt: '2026-11-25T11:03:05', readAt: null,
+        sourceUrl: null, noticeAvailable: true,
+      };
+      let read = false;
+      const list = vi.fn(({ request }: { request: Request }) => {
+        expect(new URL(request.url).searchParams.get('unreadOnly')).toBe('true');
+        return HttpResponse.json({ items: read ? [] : [notice], page: 0, size: 20, totalElements: read ? 0 : 1 });
+      });
+      server.use(
+        http.get(memberUrl, () => HttpResponse.json({ id: 2, role: 'USER' })),
+        http.get(`${memberUrl.replace('/members/me', '')}/auth/csrf`, () =>
+          HttpResponse.json({ token: 'test-token', headerName: 'X-CSRF-TOKEN' })),
+        http.get(inboxUrl, list),
+        http.patch(`${inboxUrl}/101/read`, () => {
+          read = true;
+          return HttpResponse.json({ notificationId: 101, readAt });
+        })
+      );
+      const user = userEvent.setup();
+      renderMenu();
+
+      const bell = await screen.findByRole('button', { name: '알림함' });
+      expect(list).not.toHaveBeenCalled();
+      await user.click(bell);
+      const dialog = within(screen.getByRole('dialog', { name: '읽지 않은 알림' }));
+      expect(dialog.getByRole('link', { name: '전체 알림함 보기' }).getAttribute('href')).toMatch(/^\/mypage\/notifications\/?$/);
+      await user.click(await dialog.findByRole('button', { name: '읽음 표시' }));
+      expect(await dialog.findByText('읽지 않은 알림이 없어요.')).toBeTruthy();
+      expect(dialog.queryByRole('heading', { name: '휴무 안내' })).toBeNull();
+      await user.click(dialog.getByRole('button', { name: '알림함 닫기' }));
+      expect(screen.queryByRole('dialog')).toBeNull();
+    } finally {
+      Reflect.deleteProperty(modal, 'showModal');
+      Reflect.deleteProperty(modal, 'close');
+    }
   });
 
   it('비로그인 상태에서는 로그인과 회원가입 링크만 표시한다', async () => {

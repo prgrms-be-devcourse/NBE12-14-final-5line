@@ -116,6 +116,17 @@ class NotificationInboxApiTests {
                 .andExpect(jsonPath("$.size").value(20))
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.items[0].notificationId").value(103));
+
+        mvc.perform(get(INBOX).session(owner).param("unreadOnly", "true").param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].notificationId").value(101));
+
+        mvc.perform(get(INBOX).session(owner).param("unreadOnly", "true").param("page", "1").param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.items[0].notificationId").value(104));
     }
 
     @Test

@@ -20,6 +20,21 @@ export function getPlaceDetailUrl(placeId: number, returnTo: string) {
   return `/places/detail/?${params}`;
 }
 
+export function getPlaceNoticeUrl(placeId: number, placeNoticeId: number) {
+  return `/places/detail/?id=${placeId}#place-notice-${placeNoticeId}`;
+}
+
+export function scrollToPlaceNotice() {
+  const match = /^#place-notice-([1-9]\d*)$/.exec(window.location.hash);
+  if (!match) return;
+
+  const heading = document.getElementById('place-notices');
+  // Keep the URL fragment separate from DOM IDs so native anchor scrolling cannot override this position.
+  const card = heading?.parentElement?.querySelector(`[data-place-notice-id="${match[1]}"]`);
+  const target = card && card !== heading?.nextElementSibling ? card.querySelector('h3') : heading;
+  target?.scrollIntoView({ block: 'center' });
+}
+
 /** 일반적인 같은 탭 이동 직전에만 호출하며, 브라우저 저장소가 막혀도 탐색은 유지합니다. */
 export function rememberPlaceListPosition(placeId: number, visibleCount: number, selectedPlaceId: number | null = null, y = window.scrollY) {
   try {

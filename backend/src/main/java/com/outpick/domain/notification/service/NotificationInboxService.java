@@ -22,10 +22,11 @@ public class NotificationInboxService {
     private final Clock placeClock;
 
     @Transactional(readOnly = true)
-    public NotificationPageResponse findMyNotifications(long memberId, int page, int size) {
+    public NotificationPageResponse findMyNotifications(long memberId, int page, int size, boolean unreadOnly) {
         memberService.findActiveMember(memberId);
-        var items = notificationStore.findInbox(memberId, LocalDateTime.now(placeClock), size, (long) page * size);
-        return new NotificationPageResponse(items, page, size, notificationStore.countByMemberId(memberId));
+        var items = notificationStore.findInbox(memberId, LocalDateTime.now(placeClock), size, (long) page * size,
+                unreadOnly);
+        return new NotificationPageResponse(items, page, size, notificationStore.countByMemberId(memberId, unreadOnly));
     }
 
     @Transactional

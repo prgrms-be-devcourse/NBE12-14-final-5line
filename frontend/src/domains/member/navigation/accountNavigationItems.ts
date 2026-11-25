@@ -8,10 +8,13 @@ export const memberReportLink = { label: '내 제보 상태', href: '/mypage/pla
 
 export const memberShortcutItems = [
   { label: '관심 장소', href: '/mypage/favorites/', Icon: Bookmark },
-  { label: '알림함', href: '/mypage/notifications/', Icon: Bell },
 ];
 
-export const memberNavigationItems = [memberReportLink, ...memberShortcutItems];
+export const memberNavigationItems = [
+  memberReportLink,
+  ...memberShortcutItems,
+  { label: '알림함', href: '/mypage/notifications/', Icon: Bell },
+];
 
 export const adminNavigationItems = [
   { label: '운영 현황', href: '/admin/', Icon: LayoutDashboard },

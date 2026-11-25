@@ -26,7 +26,8 @@ public class NotificationStore {
                 """, eventId, createdAt, placeId, eligibleAt);
     }
 
-    public List<NotificationResponse> findInbox(long memberId, LocalDateTime now, int size, long offset) {
+    public List<NotificationResponse> findInbox(long memberId, LocalDateTime now, int size, long offset,
+                                                boolean unreadOnly) {
         var published = PlacePublishStatus.PUBLISHED.getCode();
         return jdbc.query("""
                 SELECT n.notification_id, n.place_change_event_id, pn.place_id, pn.place_notice_id,
@@ -43,7 +44,7 @@ public class NotificationStore {
                     AND s.verified_at IS NOT NULL AND p.publish_status = ? AND pn.publish_status = ?
                     AND (pn.valid_from IS NULL OR pn.valid_from <= ?)
                     AND (pn.valid_until IS NULL OR pn.valid_until > ?)
-                WHERE n.user_id = ?
+                WHERE n.user_id = ? AND (? = false OR n.read_at IS NULL)
                 ORDER BY n.created_at DESC, n.notification_id DESC
                 LIMIT ? OFFSET ?
                 """, (row, rowNumber) -> new NotificationResponse(
@@ -51,11 +52,13 @@ public class NotificationStore {
                 row.getLong("place_id"), row.getLong("place_notice_id"), row.getString("title"),
                 row.getObject("created_at", LocalDateTime.class), row.getObject("read_at", LocalDateTime.class),
                 row.getString("source_url"), row.getBoolean("notice_available")),
-                published, published, now, now, memberId, size, offset);
+                published, published, now, now, memberId, unreadOnly, size, offset);
     }
 
-    public long countByMemberId(long memberId) {
-        return jdbc.queryForObject("SELECT COUNT(*) FROM notification WHERE user_id = ?", Long.class, memberId);
+    public long countByMemberId(long memberId, boolean unreadOnly) {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*) FROM notification WHERE user_id = ? AND (? = false OR read_at IS NULL)
+                """, Long.class, memberId, unreadOnly);
     }
 
     public Optional<NotificationReadResponse> findForReadUpdate(long memberId, long notificationId) {
