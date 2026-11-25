@@ -27,6 +27,17 @@ V9를 적용한 로컬 DB에서 `scripts/review-initial-place-images.sql`을 명
 
 ## 표시·장애 처리
 
+2026-11-25에는 팀 기준 500곳 중 스케이트장, 수영장, 레일바이크 등 우선 확인한 18곳에서 14곳의 대표 사진을 추가로 선정했다. `detailCommon2`의 콘텐츠 ID·장소명·`firstimage`·`cpyrhtDivCd`를 확인하고, 원본 HTTPS 응답의 이미지 형식도 확인했다. 4곳은 허용된 원본 URL 또는 이용 유형을 확인할 수 없어 보류했다.
+
+저장소 루트에서 초기 사진 SQL을 적용한 뒤 추가 사진 SQL을 실행한다. 공개 장소와 TourAPI 수집 출처가 일치할 때 대표 사진이 비어 있는 행에만 적용한다.
+
+```bash
+docker compose -f compose.yaml exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --user="$MYSQL_USER" --database="$MYSQL_DATABASE" --default-character-set=utf8mb4' < backend/scripts/review-initial-place-images.sql
+docker compose -f compose.yaml exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --user="$MYSQL_USER" --database="$MYSQL_DATABASE" --default-character-set=utf8mb4' < backend/scripts/review-place-images-20261125.sql
+```
+
+PowerShell에서는 각 SQL을 `Get-Content -Raw -Encoding utf8`로 읽고 같은 Compose 명령에 파이프로 전달한다.
+
 이미지 파일을 DB/S3/프런트 저장소로 복사하지 않고 확인한 원본 HTTPS URL을 참조한다. 원본을 자르거나 변환하지 않으며, 모든 사진에 `object-fit: contain`을 사용한다. Type3도 같은 방식으로 표시한다. 필터·글씨·워터마크를 사진 위에 추가하지 않는다. 원본에 포함된 표시는 유지한다.
 
 카드와 상세 사진 아래에 제공 출처와 공공누리 유형의 링크를 표시한다. 카드의 사진 출처 링크는 선택 버튼 밖에 두어 링크/버튼 중첩을 방지한다. 로딩은 지연 처리하고 사진 URL·출처·이용조건이 빠졌거나 허용하지 않은 URL인 경우, 또는 이미지 전송이 실패한 경우 대체 일러스트를 표시한다. 허용 이미지 호스트는 `tong.visitkorea.or.kr`의 `/cms/resource/` 경로로 제한한다. 프런트에서 원본 이미지를 요청하므로 외부 제공 서버 장애의 영향을 받을 수 있다.
