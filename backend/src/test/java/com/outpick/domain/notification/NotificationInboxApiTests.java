@@ -26,6 +26,7 @@ import org.testcontainers.mysql.MySQLContainer;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -262,10 +263,80 @@ class NotificationInboxApiTests {
         assertThat(storedReadAt(201)).isEqualTo(NOW);
     }
 
+    @Test
+    @DisplayName("모든 페이지의 본인 미읽음만 처리하고 미읽음 여부를 반환한다")
+    void marksAllUnreadAndReportsStatusForTheSignedInMember() throws Exception {
+        var owner = signIn(1001);
+        var other = signIn(1002);
+        var previousReadAt = NOW.minusMinutes(1);
+        for (int id = 51; id <= 72; id++) {
+            createNotice(id, "운영 안내", null, NOW.minusDays(1));
+            addNotification(id, id, 1001, NOW.minusMinutes(2), id == 72 ? previousReadAt : null);
+        }
+        jdbc.update("UPDATE place_notice SET valid_until = ? WHERE place_notice_id = 51", NOW);
+        addNotification(101, 51, 1002, NOW.minusMinutes(2), null);
+
+        mvc.perform(get(INBOX + "/unread-status")).andExpect(status().isUnauthorized());
+        mvc.perform(markAllRead(new MockHttpSession())).andExpect(status().isUnauthorized());
+        mvc.perform(patch(INBOX + "/read-all").session(owner)).andExpect(status().isForbidden());
+        mvc.perform(get(INBOX + "/unread-status").session(owner))
+                .andExpect(status().isOk())
+                .andExpect(content().json("{\"hasUnread\":true}"));
+        mvc.perform(markAllRead(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.updatedCount").value(21));
+        mvc.perform(markAllRead(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.updatedCount").value(0));
+        mvc.perform(get(INBOX + "/unread-status").session(owner))
+                .andExpect(status().isOk())
+                .andExpect(content().json("{\"hasUnread\":false}"));
+        mvc.perform(get(INBOX + "/unread-status").session(other))
+                .andExpect(status().isOk())
+                .andExpect(content().json("{\"hasUnread\":true}"));
+        assertThat(storedReadAt(51)).isEqualTo(NOW);
+        assertThat(storedReadAt(72)).isEqualTo(previousReadAt);
+        assertThat(storedReadAt(101)).isNull();
+    }
+
+    @Test
+    @DisplayName("전체 읽음 요청이 동시에 들어와도 같은 알림을 한 번만 갱신한다")
+    void concurrentBulkRequestsUpdateEachNotificationOnlyOnce() throws Exception {
+        var owner = signIn(1102);
+        createNotice(62, "운영 안내", null, NOW.minusDays(1));
+        addNotification(202, 62, 1102, NOW.minusMinutes(2), null);
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+
+        var start = new CyclicBarrier(2);
+        Callable<Integer> markAll = () -> {
+            var request = markAllRead(owner);
+            start.await(5, TimeUnit.SECONDS);
+            var response = mvc.perform(request).andExpect(status().isOk()).andReturn().getResponse();
+            return JsonPath.read(response.getContentAsString(), "$.updatedCount");
+        };
+        try (var requests = Executors.newFixedThreadPool(2)) {
+            var first = requests.submit(markAll);
+            var second = requests.submit(markAll);
+            assertThat(new int[] { first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS) })
+                    .containsExactlyInAnyOrder(0, 1);
+        }
+        assertThat(storedReadAt(202)).isEqualTo(NOW);
+    }
+
     private MockHttpServletRequestBuilder markRead(MockHttpSession session, long notificationId) throws Exception {
+        return withCsrf(session, patch(INBOX + "/{notificationId}/read", notificationId));
+    }
+
+    private MockHttpServletRequestBuilder markAllRead(MockHttpSession session) throws Exception {
+        return withCsrf(session, patch(INBOX + "/read-all"));
+    }
+
+    private MockHttpServletRequestBuilder withCsrf(MockHttpSession session,
+                                                  MockHttpServletRequestBuilder request) throws Exception {
         var csrf = mvc.perform(get("/api/v1/auth/csrf").session(session)).andReturn();
         var csrfData = JsonPath.parse(csrf.getResponse().getContentAsString());
-        return patch(INBOX + "/{notificationId}/read", notificationId).session(session)
+        return request.session(session)
                 .header(csrfData.<String>read("$.headerName"), csrfData.<String>read("$.token"));
     }
 

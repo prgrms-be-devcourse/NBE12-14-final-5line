@@ -38,3 +38,15 @@ export async function markNotificationRead(notificationId: number): Promise<Noti
   });
   return data;
 }
+
+export async function markAllNotificationsRead(): Promise<{ updatedCount: number }> {
+  const { data } = await apiClient.patch<{ updatedCount: number }>(`${notificationsPath}/read-all`, undefined, {
+    headers: await csrfHeader(),
+  });
+  return data;
+}
+
+export async function getNotificationUnreadStatus(signal?: AbortSignal): Promise<boolean> {
+  const { data } = await apiClient.get<{ hasUnread: boolean }>(`${notificationsPath}/unread-status`, { signal });
+  return data.hasUnread;
+}

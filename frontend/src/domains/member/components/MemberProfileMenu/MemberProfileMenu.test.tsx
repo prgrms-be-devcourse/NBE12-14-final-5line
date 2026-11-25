@@ -44,7 +44,10 @@ describe('탐색 화면의 프로필 메뉴', () => {
   });
 
   it('일반 회원에게 관심 장소와 알림 바로가기 및 마이페이지와 내 제보 상태를 표시한다', async () => {
-    server.use(http.get(memberUrl, () => HttpResponse.json({ id: 2, role: 'USER' })));
+    server.use(
+      http.get(memberUrl, () => HttpResponse.json({ id: 2, role: 'USER' })),
+      http.get(`${memberUrl}/notifications/unread-status`, () => HttpResponse.json({ hasUnread: false }))
+    );
     const user = userEvent.setup();
     renderMenu();
 
@@ -61,7 +64,7 @@ describe('탐색 화면의 프로필 메뉴', () => {
     ])).toEqual([['마이페이지', '/mypage'], ['내 제보 상태', '/mypage/place-reports']]);
   });
 
-  it('알림 버튼은 현재 화면에서 미읽음 모달을 열고 읽은 항목을 제거한다', async () => {
+  it('미읽음 모달의 모든 알림을 읽으면 첫 페이지로 돌아가고 빨간 점이 사라진다', async () => {
     const modal = HTMLDialogElement.prototype;
     Object.defineProperties(modal, {
       showModal: { configurable: true, value(this: HTMLDialogElement) { this.open = true; } },
@@ -72,7 +75,6 @@ describe('탐색 화면의 프로필 메뉴', () => {
     });
     try {
       const inboxUrl = `${memberUrl}/notifications`;
-      const readAt = '2026-11-25T11:08:00';
       const notice = {
         notificationId: 101, eventId: 21, placeId: 7, placeNoticeId: 34,
         title: '휴무 안내', createdAt: '2026-11-25T11:03:05', readAt: null,
@@ -80,32 +82,39 @@ describe('탐색 화면의 프로필 메뉴', () => {
       };
       let read = false;
       const list = vi.fn(({ request }: { request: Request }) => {
-        expect(new URL(request.url).searchParams.get('unreadOnly')).toBe('true');
-        return HttpResponse.json({ items: read ? [] : [notice], page: 0, size: 20, totalElements: read ? 0 : 1 });
+        const params = new URL(request.url).searchParams;
+        expect(params.get('unreadOnly')).toBe('true');
+        return HttpResponse.json({ items: read ? [] : [notice], page: Number(params.get('page')), size: 20,
+          totalElements: read ? 0 : 21 });
       });
       server.use(
         http.get(memberUrl, () => HttpResponse.json({ id: 2, role: 'USER' })),
         http.get(`${memberUrl.replace('/members/me', '')}/auth/csrf`, () =>
           HttpResponse.json({ token: 'test-token', headerName: 'X-CSRF-TOKEN' })),
         http.get(inboxUrl, list),
-        http.patch(`${inboxUrl}/101/read`, () => {
+        http.get(`${inboxUrl}/unread-status`, () => HttpResponse.json({ hasUnread: !read })),
+        http.patch(`${inboxUrl}/read-all`, () => {
           read = true;
-          return HttpResponse.json({ notificationId: 101, readAt });
+          return HttpResponse.json({ updatedCount: 21 });
         })
       );
       const user = userEvent.setup();
       renderMenu();
 
-      const bell = await screen.findByRole('button', { name: '알림함' });
+      const bell = await screen.findByRole('button', { name: '알림함', description: '읽지 않은 알림 있음' });
       expect(list).not.toHaveBeenCalled();
       await user.click(bell);
       const dialog = within(screen.getByRole('dialog', { name: '읽지 않은 알림' }));
       expect(dialog.getByRole('link', { name: '전체 알림함 보기' }).getAttribute('href')).toMatch(/^\/mypage\/notifications\/?$/);
-      await user.click(await dialog.findByRole('button', { name: '읽음 표시' }));
+      await user.click(await dialog.findByRole('button', { name: '다음' }));
+      expect(await dialog.findByText('2페이지')).toBeTruthy();
+      await user.click(dialog.getByRole('button', { name: '전체 읽음' }));
       expect(await dialog.findByText('읽지 않은 알림이 없어요.')).toBeTruthy();
       expect(dialog.queryByRole('heading', { name: '휴무 안내' })).toBeNull();
+      expect(dialog.queryByText('2페이지')).toBeNull();
       await user.click(dialog.getByRole('button', { name: '알림함 닫기' }));
       expect(screen.queryByRole('dialog')).toBeNull();
+      expect(await screen.findByRole('button', { name: '알림함' })).toBeTruthy();
     } finally {
       Reflect.deleteProperty(modal, 'showModal');
       Reflect.deleteProperty(modal, 'close');

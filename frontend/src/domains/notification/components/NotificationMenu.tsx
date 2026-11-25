@@ -4,12 +4,14 @@ import { Bell, X } from 'lucide-react';
 import Link from 'next/link';
 import { useId, useRef, useState } from 'react';
 import NotificationList from './NotificationList';
+import NotificationUnreadIndicator from './NotificationUnreadIndicator';
 
 export default function NotificationMenu({ memberId, iconClassName }: { memberId: number; iconClassName: string }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const titleId = useId();
   const dialogId = useId();
+  const unreadDescriptionId = useId();
 
   function closeDialog() {
     dialog.current?.close();
@@ -17,12 +19,16 @@ export default function NotificationMenu({ memberId, iconClassName }: { memberId
 
   return (
     <>
-      <button type="button" className={`${iconClassName} cursor-pointer`} aria-label="알림함"
+      <button type="button" className={`${iconClassName} relative cursor-pointer`} aria-label="알림함"
+        aria-describedby={unreadDescriptionId}
         aria-haspopup="dialog" aria-controls={dialogId} onClick={() => {
           dialog.current?.showModal();
           setIsOpen(true);
         }}>
         <Bell size={22} strokeWidth={1.8} aria-hidden="true" />
+        <span className="absolute top-2 right-1.5 flex">
+          <NotificationUnreadIndicator memberId={memberId} descriptionId={unreadDescriptionId} />
+        </span>
       </button>
       <dialog ref={dialog} id={dialogId} aria-labelledby={titleId} closedby="any" onClose={() => setIsOpen(false)}
         className="m-auto max-h-[calc(100%-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl bg-white p-5 text-[#16243b] shadow-xl backdrop:bg-slate-950/50 sm:p-6">

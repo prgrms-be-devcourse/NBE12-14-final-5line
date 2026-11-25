@@ -5,11 +5,17 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type MouseEvent } from 'react';
 import {
+  markAllNotificationsRead,
   markNotificationRead,
   type InboxNotification,
   type NotificationPage,
 } from '@/domains/notification/api/notificationApi';
-import { notificationInboxKey, notificationInboxQuery, notificationInboxViewKey } from '@/domains/notification/queries/notificationQueries';
+import {
+  notificationInboxKey,
+  notificationInboxQuery,
+  notificationInboxViewKey,
+  notificationUnreadStatusQuery,
+} from '@/domains/notification/queries/notificationQueries';
 import { getPlaceNoticeUrl, scrollToPlaceNotice } from '@/domains/place/lib/placeNavigation';
 import { ApiError } from '@/shared/lib/http/apiError';
 
@@ -23,15 +29,39 @@ export default function NotificationList({ memberId, unreadOnly = false, onNavig
   onNavigate?: () => void;
 }) {
   const [page, setPage] = useState(0);
+  const queryClient = useQueryClient();
   const inbox = useQuery(notificationInboxQuery(memberId, page, pageSize, unreadOnly));
+  const { data: hasUnread } = useQuery(notificationUnreadStatusQuery(memberId));
+  const bulkRead = useMutation({
+    mutationFn: markAllNotificationsRead,
+    onSuccess: async () => {
+      const queryKey = notificationInboxKey(memberId);
+      await queryClient.cancelQueries({ queryKey });
+      queryClient.removeQueries({ queryKey: notificationInboxViewKey(memberId, true), type: 'inactive' });
+      if (unreadOnly) setPage(0);
+      await queryClient.invalidateQueries({ queryKey });
+    },
+  });
 
   if (inbox.isPending) return <p className="text-sm text-slate-600" role="status">알림을 불러오고 있어요.</p>;
 
   const data = inbox.data;
   const hasNextPage = !!data && (page + 1) * data.size < data.totalElements;
+  const canReadAll = hasUnread ?? data?.items.some(notification => notification.readAt === null);
 
   return (
     <>
+      <div className="mb-3 flex justify-end">
+        <button className={buttonClassName} type="button" disabled={!canReadAll || bulkRead.isPending}
+          onClick={() => bulkRead.mutate()}>
+          {bulkRead.isPending ? '전체 읽음 처리 중…' : '전체 읽음'}
+        </button>
+      </div>
+      {bulkRead.isError && (
+        <p className="mb-3 text-sm text-red-700" role="alert">
+          {bulkRead.error instanceof ApiError ? bulkRead.error.message : '전체 알림을 읽음 처리하지 못했어요.'}
+        </p>
+      )}
       {inbox.isError && (
         <p className="mb-3 text-sm text-red-700" role="alert">
           {data ? '알림을 새로 불러오지 못했어요.' : '알림을 불러오지 못했어요.'}{' '}
@@ -124,22 +154,14 @@ function NotificationItem({ memberId, notification, unreadOnly, onNavigate }: {
             <span className={isRead ? undefined : 'font-bold text-[#5147d9]'}>{isRead ? '읽음' : '읽지 않음'}</span>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {!isRead && (
-            <button className={buttonClassName} type="button" disabled={mutation.isPending}
-              onClick={() => mutation.mutate(notification.notificationId)}>
-              {mutation.isPending ? '읽음 처리 중…' : '읽음 표시'}
-            </button>
-          )}
-          {notification.noticeAvailable && (
-            <Link className="inline-flex items-center gap-1 rounded-lg bg-[#f3f1ff] px-3 py-2 text-sm font-bold text-[#5147d9] hover:bg-[#eae6ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5147ff]"
-              href={noticeUrl} scroll={false} onClick={event => void openNotice(event)}
-              onAuxClick={event => { if (event.button === 1) void openNotice(event); }}
-              aria-disabled={mutation.isPending}>
-              공지 보기 <span aria-hidden="true">→</span>
-            </Link>
-          )}
-        </div>
+        {notification.noticeAvailable && (
+          <Link className="inline-flex items-center gap-1 rounded-lg bg-[#f3f1ff] px-3 py-2 text-sm font-bold text-[#5147d9] hover:bg-[#eae6ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5147ff]"
+            href={noticeUrl} scroll={false} onClick={event => void openNotice(event)}
+            onAuxClick={event => { if (event.button === 1) void openNotice(event); }}
+            aria-disabled={mutation.isPending} aria-busy={mutation.isPending}>
+            공지 보기 <span aria-hidden="true">→</span>
+          </Link>
+        )}
       </div>
       {mutation.isError && <p className="mt-2 text-sm text-red-700" role="alert">
         {mutation.error instanceof ApiError ? mutation.error.message : '알림을 읽음 처리하지 못했어요.'}

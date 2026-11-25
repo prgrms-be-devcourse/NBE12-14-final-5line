@@ -1,8 +1,10 @@
 package com.outpick.domain.notification.service;
 
 import com.outpick.domain.member.service.MemberService;
+import com.outpick.domain.notification.dto.NotificationBulkReadResponse;
 import com.outpick.domain.notification.dto.NotificationPageResponse;
 import com.outpick.domain.notification.dto.NotificationReadResponse;
+import com.outpick.domain.notification.dto.NotificationUnreadStatusResponse;
 import com.outpick.domain.notification.exception.NotificationErrorCode;
 import com.outpick.domain.notification.repository.NotificationStore;
 import com.outpick.global.error.BusinessException;
@@ -38,8 +40,24 @@ public class NotificationInboxService {
             return notification;
         }
 
-        var readAt = LocalDateTime.now(placeClock).truncatedTo(ChronoUnit.MICROS);
+        var readAt = currentReadTime();
         notificationStore.updateReadAt(memberId, notificationId, readAt);
         return new NotificationReadResponse(notificationId, readAt);
+    }
+
+    @Transactional
+    public NotificationBulkReadResponse markAllMyNotificationsRead(long memberId) {
+        memberService.findActiveMember(memberId);
+        return new NotificationBulkReadResponse(notificationStore.updateAllUnread(memberId, currentReadTime()));
+    }
+
+    @Transactional(readOnly = true)
+    public NotificationUnreadStatusResponse getMyUnreadStatus(long memberId) {
+        memberService.findActiveMember(memberId);
+        return new NotificationUnreadStatusResponse(notificationStore.hasUnread(memberId));
+    }
+
+    private LocalDateTime currentReadTime() {
+        return LocalDateTime.now(placeClock).truncatedTo(ChronoUnit.MICROS);
     }
 }

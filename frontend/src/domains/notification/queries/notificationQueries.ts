@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import { getNotificationPage } from '../api/notificationApi';
+import { getNotificationPage, getNotificationUnreadStatus } from '../api/notificationApi';
 
 export function notificationInboxKey(memberId: number) {
   return ['member', memberId, 'notifications'] as const;
@@ -14,5 +14,13 @@ export function notificationInboxQuery(memberId: number, page: number, size: num
     queryKey: [...notificationInboxViewKey(memberId, unreadOnly), page, size],
     queryFn: ({ signal }) => getNotificationPage(page, size, unreadOnly, signal),
     refetchOnMount: unreadOnly ? 'always' : true,
+  });
+}
+
+export function notificationUnreadStatusQuery(memberId: number) {
+  return queryOptions({
+    queryKey: [...notificationInboxKey(memberId), 'unread-status'],
+    queryFn: ({ signal }) => getNotificationUnreadStatus(signal),
+    refetchOnWindowFocus: true,
   });
 }

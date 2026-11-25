@@ -31,6 +31,7 @@ const notice: InboxNotification = {
 function mockMember() {
   server.use(
     http.get(`${api}/members/me`, () => HttpResponse.json({ id: 9, role: 'USER' })),
+    http.get(`${inboxUrl}/unread-status`, () => HttpResponse.json({ hasUnread: false })),
     http.get(`${api}/auth/csrf`, () => HttpResponse.json({ token: 'test-token', headerName: 'X-CSRF-TOKEN' }))
   );
 }
@@ -73,6 +74,7 @@ describe('개인 알림함', () => {
     expect(screen.queryByRole('link', { name: /공식 출처 보기/ })).toBeNull();
     expect(screen.getByText('2026-11-25 11:03').getAttribute('datetime')).toBe(notice.createdAt);
     expect(screen.getByText('읽지 않음')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '읽음 표시' })).toBeNull();
     await user.click(screen.getByRole('button', { name: '다음' }));
     expect(await screen.findByRole('heading', { name: '현재 볼 수 없는 공지' })).toBeTruthy();
     expect(screen.getByText('2페이지')).toBeTruthy();
@@ -105,27 +107,36 @@ describe('개인 알림함', () => {
     expect(await screen.findByText('읽음')).toBeTruthy();
   });
 
-  it('CSRF 헤더로 읽음 처리하고 서버가 반환한 최초 읽음 시각을 반영한다', async () => {
+  it('전체 읽음은 CSRF 헤더로 처리하며 실패 후 재시도하고 만료된 알림도 갱신한다', async () => {
     mockMember();
     const user = userEvent.setup();
     const readAt = '2026-11-25T11:08:00';
-    let current = notice;
-    const list = vi.fn(() => notificationPage([current]));
+    let current = { ...notice, noticeAvailable: false };
+    let attempts = 0;
     server.use(
-      http.get(inboxUrl, list),
-      http.patch(`${inboxUrl}/101/read`, async ({ request }) => {
+      http.get(inboxUrl, () => notificationPage([current])),
+      http.get(`${inboxUrl}/unread-status`, () => HttpResponse.json({ hasUnread: current.readAt === null })),
+      http.patch(`${inboxUrl}/read-all`, async ({ request }) => {
         expect(request.headers.get('X-CSRF-TOKEN')).toBe('test-token');
         expect(await request.text()).toBe('');
+        if (++attempts === 1) return HttpResponse.json({ detail: '전체 알림을 읽음 처리하지 못했어요.' }, {
+          status: 500,
+          headers: { 'Content-Type': 'application/problem+json' },
+        });
         current = { ...current, readAt };
-        return HttpResponse.json({ notificationId: 101, readAt });
+        return HttpResponse.json({ updatedCount: 1 });
       })
     );
     renderInbox();
 
-    await user.click(await screen.findByRole('button', { name: '읽음 표시' }));
+    const button = await screen.findByRole('button', { name: '전체 읽음' }) as HTMLButtonElement;
+    expect(screen.queryByRole('link', { name: '공지 보기' })).toBeNull();
+    await user.click(button);
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', '전체 알림을 읽음 처리하지 못했어요.');
+    expect(screen.getByText('읽지 않음')).toBeTruthy();
+    await user.click(button);
     expect(await screen.findByText('읽음')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '읽음 표시' })).toBeNull();
-    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(button.disabled).toBe(true));
   });
 
   it('조회 오류 뒤 재시도할 수 있고 빈 목록을 안내한다', async () => {

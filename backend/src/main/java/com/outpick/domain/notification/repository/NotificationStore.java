@@ -80,4 +80,18 @@ public class NotificationStore {
                 WHERE user_id = ? AND notification_id = ? AND read_at IS NULL
                 """, readAt, memberId, notificationId);
     }
+
+    public int updateAllUnread(long memberId, LocalDateTime readAt) {
+        return jdbc.update("""
+                UPDATE notification
+                SET read_at = ?
+                WHERE user_id = ? AND read_at IS NULL
+                """, readAt, memberId);
+    }
+
+    public boolean hasUnread(long memberId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS(SELECT 1 FROM notification WHERE user_id = ? AND read_at IS NULL)
+                """, Boolean.class, memberId));
+    }
 }
