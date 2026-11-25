@@ -15,7 +15,9 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -24,9 +26,14 @@ import org.testcontainers.mysql.MySQLContainer;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -161,6 +168,99 @@ class NotificationInboxApiTests {
         mvc.perform(get(INBOX).session(owner).param("size", "51"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors[0].field").value("size"));
+    }
+
+    @Test
+    @DisplayName("본인 알림의 최초 읽음 시각을 저장하고 목록에 반영한다")
+    void marksOwnNotificationReadAndPreservesTheFirstReadTime() throws Exception {
+        var owner = signIn(1001);
+        var alreadyReadAt = NOW.minusMinutes(1);
+        createNotice(51, "새 휴무 안내", null, NOW.minusDays(1));
+        createNotice(52, "이전 휴무 안내", null, NOW.minusDays(1));
+        addNotification(101, 51, 1001, NOW.minusMinutes(2), null);
+        addNotification(102, 52, 1001, NOW.minusMinutes(3), alreadyReadAt);
+
+        mvc.perform(markRead(owner, 101))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notificationId").value(101))
+                .andExpect(jsonPath("$.readAt").value(NOW.toString()));
+        mvc.perform(markRead(owner, 102))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.readAt").value(alreadyReadAt.toString()));
+        assertThat(storedReadAt(101)).isEqualTo(NOW);
+        assertThat(storedReadAt(102)).isEqualTo(alreadyReadAt);
+
+        mvc.perform(get(INBOX).session(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].readAt").value(NOW.toString()))
+                .andExpect(jsonPath("$.items[1].readAt").value(alreadyReadAt.toString()));
+    }
+
+    @Test
+    @DisplayName("읽음 요청은 세션과 CSRF를 검증하고 본인 외 알림의 존재를 노출하지 않는다")
+    void enforcesReadRequestAuthenticationCsrfAndOwnership() throws Exception {
+        var owner = signIn(1001);
+        var other = signIn(1002);
+        createNotice(51, "휴무 안내", null, NOW.minusDays(1));
+        addNotification(101, 51, 1001, NOW.minusMinutes(2), null);
+        addNotification(102, 51, 1002, NOW.minusMinutes(2), null);
+
+        mvc.perform(markRead(new MockHttpSession(), 101)).andExpect(status().isUnauthorized());
+        mvc.perform(patch(INBOX + "/{notificationId}/read", 101).session(owner))
+                .andExpect(status().isForbidden());
+        mvc.perform(markRead(owner, 0))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("notificationId"));
+        mvc.perform(markRead(other, 101))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("NOTIFICATION_NOT_FOUND"));
+        mvc.perform(markRead(other, 999))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOTIFICATION_NOT_FOUND"));
+        assertThat(storedReadAt(101)).isNull();
+        assertThat(storedReadAt(102)).isNull();
+    }
+
+    @Test
+    @DisplayName("같은 알림을 동시에 읽음 처리해도 두 요청에 저장된 읽음 시각을 반환한다")
+    void returnsTheStoredReadTimeForConcurrentRequests() throws Exception {
+        var owner = signIn(1101);
+        createNotice(61, "휴무 안내", null, NOW.minusDays(1));
+        addNotification(201, 61, 1101, NOW.minusMinutes(2), null);
+        var firstRequest = markRead(owner, 201);
+        var secondRequest = markRead(owner, 201);
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+
+        var start = new CyclicBarrier(2);
+        try (var requests = Executors.newFixedThreadPool(2)) {
+            var first = requests.submit(() -> {
+                start.await(5, TimeUnit.SECONDS);
+                return mvc.perform(firstRequest).andExpect(status().isOk()).andReturn();
+            });
+            var second = requests.submit(() -> {
+                start.await(5, TimeUnit.SECONDS);
+                return mvc.perform(secondRequest).andExpect(status().isOk()).andReturn();
+            });
+            var firstResponse = first.get(10, TimeUnit.SECONDS).getResponse().getContentAsString();
+            var secondResponse = second.get(10, TimeUnit.SECONDS).getResponse().getContentAsString();
+            assertThat(JsonPath.<String>read(firstResponse, "$.readAt")).isEqualTo(NOW.toString());
+            assertThat(JsonPath.<String>read(secondResponse, "$.readAt")).isEqualTo(NOW.toString());
+        }
+        assertThat(storedReadAt(201)).isEqualTo(NOW);
+    }
+
+    private MockHttpServletRequestBuilder markRead(MockHttpSession session, long notificationId) throws Exception {
+        var csrf = mvc.perform(get("/api/v1/auth/csrf").session(session)).andReturn();
+        var csrfData = JsonPath.parse(csrf.getResponse().getContentAsString());
+        return patch(INBOX + "/{notificationId}/read", notificationId).session(session)
+                .header(csrfData.<String>read("$.headerName"), csrfData.<String>read("$.token"));
+    }
+
+    private LocalDateTime storedReadAt(long notificationId) {
+        return jdbc.queryForObject("SELECT read_at FROM notification WHERE notification_id = ?",
+                LocalDateTime.class, notificationId);
     }
 
     private MockHttpSession signIn(long memberId) throws Exception {

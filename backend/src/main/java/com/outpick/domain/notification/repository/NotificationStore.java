@@ -1,6 +1,7 @@
 package com.outpick.domain.notification.repository;
 
 import com.outpick.domain.notification.dto.NotificationResponse;
+import com.outpick.domain.notification.dto.NotificationReadResponse;
 import com.outpick.domain.place.entity.PlacePublishStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
@@ -54,5 +56,25 @@ public class NotificationStore {
 
     public long countByMemberId(long memberId) {
         return jdbc.queryForObject("SELECT COUNT(*) FROM notification WHERE user_id = ?", Long.class, memberId);
+    }
+
+    public Optional<NotificationReadResponse> findForReadUpdate(long memberId, long notificationId) {
+        return jdbc.query("""
+                SELECT notification_id, read_at
+                FROM notification
+                WHERE user_id = ? AND notification_id = ?
+                FOR UPDATE
+                """, rows -> rows.next()
+                ? Optional.of(new NotificationReadResponse(rows.getLong("notification_id"),
+                        rows.getObject("read_at", LocalDateTime.class)))
+                : Optional.empty(), memberId, notificationId);
+    }
+
+    public void updateReadAt(long memberId, long notificationId, LocalDateTime readAt) {
+        jdbc.update("""
+                UPDATE notification
+                SET read_at = ?
+                WHERE user_id = ? AND notification_id = ? AND read_at IS NULL
+                """, readAt, memberId, notificationId);
     }
 }
