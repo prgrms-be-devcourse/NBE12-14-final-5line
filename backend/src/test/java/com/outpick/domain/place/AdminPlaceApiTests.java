@@ -39,8 +39,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
 
-import java.time.Clock;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -108,6 +108,94 @@ class AdminPlaceApiTests {
                 .andExpect(jsonPath("$.activities").isEmpty()).andExpect(jsonPath("$.sources").isEmpty());
         mvc.perform(get("/api/v1/places").param("query", "관리자 등록 장소"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
+        mvc.perform(get("/api/v1/places/{id}", placeId)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("운영자는 검수 전 장소를 ID 내림차순으로 조회하고 페이지를 이동할 수 있다")
+    void adminPagesAndFiltersDraftPlaces() throws Exception {
+        var region = regions.save(Region.builder().name("목록 테스트 지역").build());
+        var first = places.save(Place.builder().region(region).name("목록 첫 장소").build());
+        var second = places.save(Place.builder().region(region).name("목록 둘째 장소").nameAlias("Review_2").build());
+        places.save(Place.builder().region(region).name("목록 공개 장소").nameAlias("Review_3")
+                .publishStatus(PlacePublishStatus.PUBLISHED).build());
+        places.save(Place.builder().region(region).name("목록 숨김 장소")
+                .publishStatus(PlacePublishStatus.HIDDEN).build());
+        var admin = login("admin@example.com", "12341234");
+
+        mvc.perform(get("/api/v1/admin/places").param("status", "DRAFT").session(admin.session()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20)).andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].id").value(second.getId()))
+                .andExpect(jsonPath("$.items[0].status").value("DRAFT"));
+        mvc.perform(get("/api/v1/admin/places").param("status", "DRAFT").param("page", "1").param("size", "1")
+                        .session(admin.session()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.size").value(1)).andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(first.getId()));
+        mvc.perform(get("/api/v1/admin/places").param("query", " review_ ").param("status", "DRAFT")
+                        .session(admin.session()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(second.getId()));
+        mvc.perform(get("/api/v1/admin/places").param("query", "Review_3").session(admin.session()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.items[0].status").value("PUBLISHED"));
+        mvc.perform(get("/api/v1/admin/places").param("query", "review%").session(admin.session()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.items").isEmpty());
+        mvc.perform(get("/api/v1/admin/places").param("size", "51").session(admin.session()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("운영자는 검수 전 장소의 기본 정보와 종목, 확인 여부가 다른 출처를 조회할 수 있다")
+    void adminReadsDraftPlaceDetails() throws Exception {
+        var region = regions.save(Region.builder().name("상세 테스트 지역").build());
+        var place = places.save(Place.builder().region(region).name("수집된 검수 전 장소").nameAlias("수집 별칭")
+                .address("수집 주소").introduce("수집 소개").latitude(new BigDecimal("37.5"))
+                .longitude(new BigDecimal("127.1")).homepage("https://example.com").build());
+        var other = places.save(Place.builder().region(region).name("다른 장소").build());
+        var category = ActivityCategory.builder().name("수집 종목 분류").build();
+        entityManager.persist(category);
+        var type = ActivityType.builder().category(category).name("스키").build();
+        entityManager.persist(type);
+        var activity = PlaceActivity.builder().place(place).activityType(type).environmentType("OUTDOOR").build();
+        entityManager.persist(activity);
+        entityManager.persist(PlaceActivitySeason.builder().placeActivity(activity).season("WINTER").build());
+        entityManager.persist(PlaceActivity.builder().place(other).activityType(type).build());
+        sourceFor(place);
+        sources.saveAndFlush(SourceRecord.builder().place(place).type("TOUR_API")
+                .url("https://example.com/tour-api").build());
+        sourceFor(other);
+        entityManager.clear();
+        var admin = login("admin@example.com", "12341234");
+
+        mvc.perform(get("/api/v1/admin/places/{id}", place.getId()).session(admin.session()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(place.getId()))
+                .andExpect(jsonPath("$.name").value("수집된 검수 전 장소"))
+                .andExpect(jsonPath("$.nameAlias").value("수집 별칭"))
+                .andExpect(jsonPath("$.address").value("수집 주소"))
+                .andExpect(jsonPath("$.description").value("수집 소개"))
+                .andExpect(jsonPath("$.latitude").value(37.5))
+                .andExpect(jsonPath("$.longitude").value(127.1))
+                .andExpect(jsonPath("$.homepage").value("https://example.com"))
+                .andExpect(jsonPath("$.regionId").value(region.getId()))
+                .andExpect(jsonPath("$.regionName").value("상세 테스트 지역"))
+                .andExpect(jsonPath("$.status").value("DRAFT"))
+                .andExpect(jsonPath("$.activities.length()").value(1))
+                .andExpect(jsonPath("$.activities[0].activityTypeName").value("스키"))
+                .andExpect(jsonPath("$.activities[0].seasons[0]").value("WINTER"))
+                .andExpect(jsonPath("$.sources.length()").value(2))
+                .andExpect(jsonPath("$.sources[0].url").value("https://example.com/place"))
+                .andExpect(jsonPath("$.sources[0].verifiedAt").value("2026-11-21T00:00:00"))
+                .andExpect(jsonPath("$.sources[1].url").value("https://example.com/tour-api"))
+                .andExpect(jsonPath("$.sources[1].type").value("TOUR_API"))
+                .andExpect(jsonPath("$.sources[1].verifiedAt").doesNotExist());
+        mvc.perform(get("/api/v1/admin/places/{id}", Long.MAX_VALUE).session(admin.session()))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -299,6 +387,7 @@ class AdminPlaceApiTests {
                 """, draft.getId());
         long eventId = ((Number) event.get("place_change_event_id")).longValue();
         assertThat(event).containsEntry("task_status", "PENDING").containsEntry("processed_at", null);
+        assertThat(eventEligibleAt(draft.getId())).isEqualTo(PUBLISHED_AT);
         mvc.perform(get("/api/v1/places/{id}", place.getId()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.notices[0].title").value("처음 공개한 공지"));
 
@@ -322,8 +411,31 @@ class AdminPlaceApiTests {
         mvc.perform(get("/api/v1/places/{id}", place.getId()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.notices[0].title").value("수정한 공개 공지"));
         assertThat(eventIds(draft.getId())).containsExactly(eventId);
+        assertThat(eventEligibleAt(draft.getId())).isEqualTo(PUBLISHED_AT);
         assertThat(jdbc.queryForObject("SELECT task_status FROM place_change_event WHERE place_change_event_id = ?",
                 String.class, eventId)).isEqualTo("COMPLETED");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "2026-11-24T09:00:00, 2026-11-24T10:00:00.123456",
+            "2026-11-24T11:00:00, 2026-11-24T11:00:00"
+    })
+    @DisplayName("공지 최초 공개 시 유효기간 시작일과 공개 시각 중 늦은 시각을 저장한다")
+    void firstPublicationUsesTheLaterEligibleTime(String validFrom, String expectedEligibleAt) throws Exception {
+        var place = publishedPlace("알림 기준 시각 검사 장소");
+        var source = sourceFor(place);
+        var draft = saveNotice(place, source, "저장된 초안", PlacePublishStatus.DRAFT);
+        var admin = login("admin@example.com", "12341234");
+
+        mvc.perform(patch(noticePath(place.getId()) + "/" + draft.getId()).param("publish", "true")
+                        .session(admin.session()).header(admin.header(), admin.token()).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"공지","content":"본문","sourceRecordId":%d,"validFrom":"%s"}
+                                """.formatted(source.getId(), validFrom)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.publishStatus").value("PUBLISHED"));
+
+        assertThat(eventEligibleAt(draft.getId())).isEqualTo(LocalDateTime.parse(expectedEligibleAt));
     }
 
     @Test
@@ -399,6 +511,7 @@ class AdminPlaceApiTests {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM source_record WHERE place_id = ?", Long.class, place.getId()))
                 .isEqualTo(1L);
         assertThat(eventIds(draft.getId())).hasSize(1);
+        assertThat(eventEligibleAt(draft.getId())).isNull();
     }
 
     @Test
@@ -513,6 +626,10 @@ class AdminPlaceApiTests {
 
     private List<Long> eventIds(long noticeId) {
         return jdbc.queryForList("SELECT place_change_event_id FROM place_change_event WHERE place_notice_id = ?", Long.class, noticeId);
+    }
+
+    private LocalDateTime eventEligibleAt(long noticeId) {
+        return jdbc.queryForObject("SELECT eligible_at FROM place_change_event WHERE place_notice_id = ?", LocalDateTime.class, noticeId);
     }
 
     private Place publishedPlace(String name) {
