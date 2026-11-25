@@ -10,6 +10,7 @@ import { safeHttpUrl } from '@/domains/place/lib/placeLinks';
 import { ApiError } from '@/shared/lib/http/apiError';
 import { getListReturnUrl } from '@/domains/place/lib/placeNavigation';
 import PlaceReviews from '@/domains/review/components/PlaceReviews/PlaceReviews';
+import FavoritePlaceButton from '../FavoritePlaceButton';
 import OperatingInfoPanel, { placeFactsClassName } from '../OperatingInfoPanel/OperatingInfoPanel';
 
 const eyebrowClassName = 'text-[10px] font-extrabold tracking-[1.7px] text-[#6156ff]';
@@ -54,7 +55,8 @@ export default function PlaceDetail() {
                 <h1 className="mt-2.5 text-[30px] font-extrabold tracking-[-1.5px] md:text-[clamp(28px,3vw,42px)]">{place.name ?? '이름 미확인'}</h1>
                 <p className="mt-4 text-sm/[1.8] text-[#718096]">{place.description ?? '등록된 소개가 없습니다.'}</p>
                 <div className="mt-6 flex flex-wrap gap-[7px]">{place.activities.map(activity => <span key={activity.placeActivityId} className="rounded-md bg-[#f3f2ff] px-2.5 py-1.5 text-[12px] text-[#6156cc]">{activity.activityTypeName}</span>)}</div>
-                <div className="mt-5">
+                <div className="mt-5 flex flex-wrap items-start gap-2">
+                  <FavoritePlaceButton placeId={place.id} />
                   <CopyPlaceLinkButton label="장소 링크 복사" path={`/places/detail/?id=${place.id}`} />
                 </div>
               </div>

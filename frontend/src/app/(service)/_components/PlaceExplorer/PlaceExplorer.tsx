@@ -24,7 +24,6 @@ const emptyClassName = 'rounded-xl border border-dashed border-[#dfe4ed] px-3 py
 const emptyHeadingClassName = 'mt-2.5 text-[17px] font-bold';
 const emptyTextClassName = 'mt-2.5 text-[13px] text-[#7c899d]';
 const emptyButtonClassName = 'mt-[22px] cursor-pointer rounded-lg bg-[#5147ff] px-[15px] py-2.5 text-[12px] text-white';
-const detailLinkClassName = 'block border-t border-[#edf0f4] pt-2.5 text-[11px] text-[#5147ff] no-underline';
 
 function countThroughCard(index: number) {
   return Math.max(cardBatchSize, Math.ceil((index + 1) / cardBatchSize) * cardBatchSize);
@@ -85,13 +84,21 @@ export default function PlaceExplorer() {
   const visibleCount = Math.min(places.length, listWindow.count);
   const hasMore = visibleCount < places.length;
 
-  function selectMapMarker(nextSelection: PlaceMapSelection) {
-    const index = places.findIndex(place => place.id === nextSelection.id);
-    if (index < 0) return;
-    const count = countThroughCard(index);
-    setListWindow(current => count > current.count ? { ...current, count } : current);
+  function togglePlaceSelection(nextSelection: PlaceMapSelection) {
+    if (nextSelection.id === selection?.id) {
+      setSelection(null);
+      return;
+    }
+
+    if (nextSelection.source === 'map') {
+      const index = places.findIndex(place => place.id === nextSelection.id);
+      if (index < 0) return;
+      const count = countThroughCard(index);
+      setListWindow(current => count > current.count ? { ...current, count } : current);
+      setMobileMap(false);
+    }
+
     setSelection(nextSelection);
-    setMobileMap(false);
   }
 
   useEffect(() => {
@@ -244,18 +251,16 @@ export default function PlaceExplorer() {
               {places.slice(0, visibleCount).map(place => (
                 <li key={place.id} className="min-w-0">
                   <article data-place-id={place.id} className={`outpick-placeCard flex h-full flex-col overflow-hidden rounded-[13px] border ${selectedPlace?.id === place.id ? 'outpick-placeCardSelected' : ''}`}>
-                    <button type="button" aria-pressed={selectedPlace?.id === place.id} className="w-full flex-1 cursor-pointer bg-white text-left" onClick={() => setSelection({ id: place.id, source: 'list' })}>
+                    <button type="button" aria-pressed={selectedPlace?.id === place.id} className="w-full flex-1 cursor-pointer bg-white text-left focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#5147ff]" onClick={() => togglePlaceSelection({ id: place.id, source: 'list' })}>
                       <PlacePhoto place={place} />
                       <div className="p-3 min-[68.8125rem]:p-4">
                         <p className="text-[11px] text-[#7c899d]">{place.address ?? '주소 미확인'}</p>
                         <h2 className="mt-[5px] text-[14px] font-extrabold tracking-[-.5px] md:text-[16px]">{place.name}</h2>
-                        <p className="mt-[7px] text-[10px]/[1.7] text-[#7c899d] md:text-[11px]">상세에서 종목과 방문 정보를 확인해 보세요.</p>
-                        <span className="mt-[15px] flex items-center justify-between text-[11px] font-bold text-[#5147ff]">{selectedPlace?.id === place.id ? '선택한 장소' : '장소 선택'} <span className="text-[17px]" aria-hidden="true">↗</span></span>
                       </div>
                     </button>
                     <PlacePhotoCredit place={place} />
-                    <Link className={`${detailLinkClassName} mx-4 mb-4`} aria-label={`${place.name} 상세 보기`} href={getPlaceDetailUrl(place.id, listUrl)} onClick={event => openPlaceDetail(event, place.id)}>
-                      상세 보기 <span className="float-right" aria-hidden="true">→</span>
+                    <Link className="mx-3 mb-3 flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[#dfe4ed] bg-white px-2 py-2 text-center text-xs font-bold text-[#5147ff] no-underline hover:border-[#c6c1ff] hover:bg-[#f6f5ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5147ff] min-[68.8125rem]:mx-4 min-[68.8125rem]:mb-4" aria-label={`${place.name} 상세 보기`} href={getPlaceDetailUrl(place.id, listUrl)} onClick={event => openPlaceDetail(event, place.id)}>
+                      상세 보기 <span aria-hidden="true">→</span>
                     </Link>
                   </article>
                 </li>
@@ -274,7 +279,7 @@ export default function PlaceExplorer() {
         </section>
 
         <aside aria-label="장소 지도" className={`relative max-md:h-[75dvh] max-md:min-h-[560px] md:border-l md:border-l-[#e5e9ef] ${!mobileMap ? 'max-md:hidden' : ''}`}>
-          <KakaoPlaceMap places={locatedPlaces} totalPlaces={placeQuery.data?.totalElements} searchingArea={searchingArea} selection={selectedPlace ? selection : null} onSelect={selectMapMarker} onBoundsChange={changeMapBounds} view={mapView} hasSearchBounds={mapBounds !== null} />
+          <KakaoPlaceMap places={locatedPlaces} totalPlaces={placeQuery.data?.totalElements} searchingArea={searchingArea} selection={selectedPlace ? selection : null} onSelect={togglePlaceSelection} onBoundsChange={changeMapBounds} view={mapView} hasSearchBounds={mapBounds !== null} />
           {failed && mobileMap && (
             <div className={mapMessageClassName} role="alert">
               <p>지도에 표시할 장소를 불러오지 못했어요.</p>
@@ -285,7 +290,7 @@ export default function PlaceExplorer() {
             <div className="absolute inset-x-4 bottom-20 z-[2] rounded-xl border border-[#e7eae7] bg-[#fffffff5] px-5 py-[18px] shadow-[0_5px_20px_#34553a15] md:bottom-10" aria-live="polite">
               <span className="text-[10px] text-[#6156ff]">선택한 장소</span><h3 className="mt-[3px] text-[16px] font-bold">{selectedPlace.name}</h3>
               <p className="mt-[5px] text-[11px]/[1.7] text-[#7d899a]">{selectedPlace.address ?? '주소 미확인'}</p>
-              <Link className={`${detailLinkClassName} mt-3`} href={getPlaceDetailUrl(selectedPlace.id, listUrl)} onClick={event => openPlaceDetail(event, selectedPlace.id)}>장소 상세 보기 →</Link>
+              <Link className="mt-3 block border-t border-[#edf0f4] pt-2.5 text-[11px] text-[#5147ff] no-underline" href={getPlaceDetailUrl(selectedPlace.id, listUrl)} onClick={event => openPlaceDetail(event, selectedPlace.id)}>장소 상세 보기 →</Link>
             </div>
           )}
         </aside>

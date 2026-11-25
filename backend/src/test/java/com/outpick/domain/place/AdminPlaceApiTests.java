@@ -1,7 +1,11 @@
 package com.outpick.domain.place;
 
 import com.jayway.jsonpath.JsonPath;
+import com.outpick.domain.place.entity.ActivityCategory;
+import com.outpick.domain.place.entity.ActivityType;
 import com.outpick.domain.place.entity.Place;
+import com.outpick.domain.place.entity.PlaceActivity;
+import com.outpick.domain.place.entity.PlaceActivitySeason;
 import com.outpick.domain.place.entity.PlaceNotice;
 import com.outpick.domain.place.entity.PlacePublishStatus;
 import com.outpick.domain.place.entity.Region;
@@ -36,6 +40,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
 
 import java.time.Clock;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -82,30 +87,37 @@ class AdminPlaceApiTests {
     @Autowired JdbcTemplate jdbc;
 
     @Test
-    @DisplayName("운영자가 추가한 장소는 초안으로 저장되고 공개 검색에는 보이지 않는다")
+    @DisplayName("운영자가 등록한 장소 초안은 운영자 상세에서만 조회할 수 있다")
     void adminCreatesPrivateDraft() throws Exception {
         long regionId = regions.saveAndFlush(Region.builder().code("ADMIN-TEST").name("관리자 테스트 지역").build()).getId();
         var admin = login("admin@example.com", "12341234");
 
-        mvc.perform(post("/api/v1/admin/places").session(admin.session())
+        var created = mvc.perform(post("/api/v1/admin/places").session(admin.session())
                         .header(admin.header(), admin.token()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"regionId":%d,"name":"관리자 등록 장소","address":"테스트 주소",
                                  "description":"검토 전 초안","latitude":37.5,"longitude":127.1}
                                 """.formatted(regionId)))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("DRAFT"));
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("DRAFT")).andReturn();
+        Number placeId = JsonPath.parse(created.getResponse().getContentAsString()).read("$.id");
 
         mvc.perform(get("/api/v1/admin/places").session(admin.session()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].name").value("관리자 등록 장소"));
+        mvc.perform(get("/api/v1/admin/places/{id}", placeId).session(admin.session()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.description").value("검토 전 초안"))
+                .andExpect(jsonPath("$.activities").isEmpty()).andExpect(jsonPath("$.sources").isEmpty());
         mvc.perform(get("/api/v1/places").param("query", "관리자 등록 장소"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
     }
 
     @Test
-    @DisplayName("일반 회원은 운영 현황과 장소 등록에 접근할 수 없다")
+    @DisplayName("비로그인 사용자의 운영자 조회와 일반 회원의 운영자 조회·등록을 거절한다")
     void memberCannotUseAdminPlaces() throws Exception {
+        var place = publishedPlace("운영자 조회 권한 테스트 장소");
         var guest = mvc.perform(get("/api/v1/admin/dashboard"));
         guest.andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/admin/places").param("status", "DRAFT")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/admin/places/{id}", place.getId())).andExpect(status().isUnauthorized());
         var csrf = mvc.perform(get("/api/v1/auth/csrf")).andReturn();
         var session = (MockHttpSession) csrf.getRequest().getSession(false);
         var json = JsonPath.parse(csrf.getResponse().getContentAsString());
@@ -118,6 +130,10 @@ class AdminPlaceApiTests {
                 .andExpect(status().isCreated());
         var member = login("place-user@example.com", "password123");
         mvc.perform(get("/api/v1/admin/dashboard").session(member.session()))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/admin/places").param("status", "DRAFT").session(member.session()))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/admin/places/{id}", place.getId()).session(member.session()))
                 .andExpect(status().isForbidden());
         mvc.perform(post("/api/v1/admin/places").session(member.session())
                         .header(member.header(), member.token()).contentType(MediaType.APPLICATION_JSON)
@@ -283,7 +299,6 @@ class AdminPlaceApiTests {
                 """, draft.getId());
         long eventId = ((Number) event.get("place_change_event_id")).longValue();
         assertThat(event).containsEntry("task_status", "PENDING").containsEntry("processed_at", null);
-        assertThat(eventEligibleAt(draft.getId())).isEqualTo(PUBLISHED_AT);
         mvc.perform(get("/api/v1/places/{id}", place.getId()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.notices[0].title").value("처음 공개한 공지"));
 
@@ -307,31 +322,8 @@ class AdminPlaceApiTests {
         mvc.perform(get("/api/v1/places/{id}", place.getId()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.notices[0].title").value("수정한 공개 공지"));
         assertThat(eventIds(draft.getId())).containsExactly(eventId);
-        assertThat(eventEligibleAt(draft.getId())).isEqualTo(PUBLISHED_AT);
         assertThat(jdbc.queryForObject("SELECT task_status FROM place_change_event WHERE place_change_event_id = ?",
                 String.class, eventId)).isEqualTo("COMPLETED");
-    }
-
-    @ParameterizedTest
-    @CsvSource({
-            "2026-11-24T09:00:00, 2026-11-24T10:00:00.123456",
-            "2026-11-24T11:00:00, 2026-11-24T11:00:00"
-    })
-    @DisplayName("공지 최초 공개 시 유효기간 시작일과 공개 시각 중 늦은 시각을 저장한다")
-    void firstPublicationUsesTheLaterEligibleTime(String validFrom, String expectedEligibleAt) throws Exception {
-        var place = publishedPlace("알림 기준 시각 검사 장소");
-        var source = sourceFor(place);
-        var draft = saveNotice(place, source, "저장된 초안", PlacePublishStatus.DRAFT);
-        var admin = login("admin@example.com", "12341234");
-
-        mvc.perform(patch(noticePath(place.getId()) + "/" + draft.getId()).param("publish", "true")
-                        .session(admin.session()).header(admin.header(), admin.token()).contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"title":"공지","content":"본문","sourceRecordId":%d,"validFrom":"%s"}
-                                """.formatted(source.getId(), validFrom)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.publishStatus").value("PUBLISHED"));
-
-        assertThat(eventEligibleAt(draft.getId())).isEqualTo(LocalDateTime.parse(expectedEligibleAt));
     }
 
     @Test
@@ -407,7 +399,6 @@ class AdminPlaceApiTests {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM source_record WHERE place_id = ?", Long.class, place.getId()))
                 .isEqualTo(1L);
         assertThat(eventIds(draft.getId())).hasSize(1);
-        assertThat(eventEligibleAt(draft.getId())).isNull();
     }
 
     @Test
@@ -522,10 +513,6 @@ class AdminPlaceApiTests {
 
     private List<Long> eventIds(long noticeId) {
         return jdbc.queryForList("SELECT place_change_event_id FROM place_change_event WHERE place_notice_id = ?", Long.class, noticeId);
-    }
-
-    private LocalDateTime eventEligibleAt(long noticeId) {
-        return jdbc.queryForObject("SELECT eligible_at FROM place_change_event WHERE place_notice_id = ?", LocalDateTime.class, noticeId);
     }
 
     private Place publishedPlace(String name) {

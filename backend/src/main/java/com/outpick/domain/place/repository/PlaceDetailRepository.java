@@ -1,5 +1,6 @@
 package com.outpick.domain.place.repository;
 
+import com.outpick.domain.place.dto.PlaceActivityResponse;
 import com.outpick.domain.place.dto.PlaceNoticeResponse;
 import com.outpick.domain.place.dto.PlaceSourceResponse;
 import com.outpick.domain.place.entity.Place;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Repository
 @RequiredArgsConstructor
@@ -28,14 +30,25 @@ public class PlaceDetailRepository {
                 .getResultStream().findFirst();
     }
 
-    public List<PlaceActivity> findActivities(long placeId) {
+    /** 종목과 시즌을 각각 한 번씩 조회해 장소 상세에 표시할 종목별 시즌 목록을 만듭니다. */
+    public List<PlaceActivityResponse> findActivityResponses(long placeId) {
+        var activities = findActivities(placeId);
+        var seasons = findSeasons(placeId).stream().collect(Collectors.groupingBy(
+                season -> season.getPlaceActivity().getId(),
+                Collectors.mapping(PlaceActivitySeason::getSeason, Collectors.toList())));
+        return activities.stream().map(activity -> new PlaceActivityResponse(
+                activity.getId(), activity.getActivityType().getId(), activity.getActivityType().getName(),
+                activity.getEnvironmentType(), seasons.getOrDefault(activity.getId(), List.of()))).toList();
+    }
+
+    private List<PlaceActivity> findActivities(long placeId) {
         return entityManager.createQuery("""
                 select a from PlaceActivity a join fetch a.activityType
                 where a.place.id = :id order by a.id
                 """, PlaceActivity.class).setParameter("id", placeId).getResultList();
     }
 
-    public List<PlaceActivitySeason> findSeasons(long placeId) {
+    private List<PlaceActivitySeason> findSeasons(long placeId) {
         return entityManager.createQuery("""
                 select s from PlaceActivitySeason s where s.placeActivity.place.id = :id
                 order by s.placeActivity.id, s.season
@@ -43,12 +56,22 @@ public class PlaceDetailRepository {
     }
 
     public List<PlaceSourceResponse> findVerifiedSources(long placeId) {
+        return findSources(placeId, true);
+    }
+
+    /** 운영자 상세에서 검수할 수 있도록 아직 확인일이 없는 출처도 조회합니다. */
+    public List<PlaceSourceResponse> findSources(long placeId) {
+        return findSources(placeId, false);
+    }
+
+    private List<PlaceSourceResponse> findSources(long placeId, boolean verifiedOnly) {
         return entityManager.createQuery("""
                 select new com.outpick.domain.place.dto.PlaceSourceResponse(
                     s.id, s.type, s.url, s.verifiedFields, s.originUpdatedAt, s.verifiedAt)
-                from SourceRecord s where s.place.id = :id and s.verifiedAt is not null
+                from SourceRecord s where s.place.id = :id and (:verifiedOnly = false or s.verifiedAt is not null)
                 order by s.verifiedAt desc, s.id desc
-                """, PlaceSourceResponse.class).setParameter("id", placeId).getResultList();
+                """, PlaceSourceResponse.class).setParameter("id", placeId)
+                .setParameter("verifiedOnly", verifiedOnly).getResultList();
     }
 
     public List<PlaceNoticeResponse> findActiveNotices(long placeId, LocalDateTime now) {

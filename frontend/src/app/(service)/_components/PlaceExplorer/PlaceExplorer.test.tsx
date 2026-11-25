@@ -96,7 +96,7 @@ describe('DB 장소 목록 화면', () => {
     expect(screen.getByLabelText('테스트 지도').getAttribute('data-ids')).toBe('1');
     expect(requests[0].searchParams.get('size')).toBe('50');
   });
-  it('마커를 선택하면 조회 없이 카드를 강조하고 목록에서 보이게 한다', async () => {
+  it('추가 조회 없이 마커와 카드의 선택을 공유하고 같은 장소를 누르면 해제한다', async () => {
     const user = userEvent.setup();
     mount();
     const cardButton = await screen.findByRole('button', { name: /눈마루 리조트/ });
@@ -107,12 +107,24 @@ describe('DB 장소 목록 화면', () => {
     expect(cardButton.getAttribute('aria-pressed')).toBe('false');
     await user.click(marker);
     expect(cardButton.getAttribute('aria-pressed')).toBe('true');
+    expect(marker.getAttribute('aria-pressed')).toBe('true');
     expect(scrollIntoView).toHaveBeenCalledExactlyOnceWith({ block: 'nearest', inline: 'nearest' });
 
     await user.click(cardButton);
+    expect(cardButton.getAttribute('aria-pressed')).toBe('false');
+    expect(marker.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByRole('link', { name: '장소 상세 보기 →' })).toBeNull();
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
+
+    await user.click(cardButton);
+    expect(marker.getAttribute('aria-pressed')).toBe('true');
     await user.click(screen.getByRole('button', { name: '지도 보기' }));
+    await user.click(marker);
+    expect(cardButton.getAttribute('aria-pressed')).toBe('false');
+    expect(marker.getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByRole('button', { name: '목록 보기' })).toBeTruthy();
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+
     await user.click(marker);
     expect(screen.getByRole('button', { name: '지도 보기' }).getAttribute('aria-pressed')).toBe('false');
     expect(scrollIntoView).toHaveBeenCalledTimes(2);
@@ -416,7 +428,7 @@ describe('DB 장소 목록 화면', () => {
     expect(screen.getByRole('button', { name: '테스트 마커 1' }).getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByRole('button', { name: '테스트 마커 35' }).getAttribute('aria-pressed')).toBe('true');
     expect(within(screen.getByRole('list', { name: '장소 목록' }))
-      .getByRole('button', { name: /복귀 장소 35\s/ }).getAttribute('aria-pressed')).toBe('true');
+      .getByRole('button', { name: /복귀 장소 35\b/ }).getAttribute('aria-pressed')).toBe('true');
     expect(requests).toHaveLength(1);
     rememberPlaceListPosition(35, 40, 1);
     returned.unmount();

@@ -2,9 +2,11 @@ package com.outpick.domain.place.service;
 
 import com.outpick.domain.member.entity.MemberRole;
 import com.outpick.domain.member.service.MemberService;
+import com.outpick.domain.place.dto.AdminPlaceDetailResponse;
 import com.outpick.domain.place.dto.AdminPlaceNoticePageResponse;
 import com.outpick.domain.place.dto.AdminPlaceNoticeRequest;
 import com.outpick.domain.place.dto.AdminPlaceNoticeResponse;
+import com.outpick.domain.place.dto.AdminPlacePageResponse;
 import com.outpick.domain.place.dto.AdminPlaceRequest;
 import com.outpick.domain.place.dto.AdminPlaceResponse;
 import com.outpick.domain.place.entity.Place;
@@ -14,6 +16,7 @@ import com.outpick.domain.place.entity.PlacePublishStatus;
 import com.outpick.domain.place.entity.SourceRecord;
 import com.outpick.domain.place.exception.PlaceErrorCode;
 import com.outpick.domain.place.repository.PlaceChangeEventRepository;
+import com.outpick.domain.place.repository.PlaceDetailRepository;
 import com.outpick.domain.place.repository.PlaceNoticeRepository;
 import com.outpick.domain.place.repository.PlaceRepository;
 import com.outpick.domain.place.repository.RegionRepository;
@@ -45,6 +48,7 @@ public class AdminPlaceService {
     private final SourceRecordRepository sources;
     private final PlaceChangeEventRepository changeEvents;
     private final Clock placeClock;
+    private final PlaceDetailRepository details;
 
     public Map<String, Long> summary(long memberId) {
         requireAdmin(memberId);
@@ -57,6 +61,20 @@ public class AdminPlaceService {
         requireAdmin(memberId);
         return places.findAllByOrderByIdDesc(PageRequest.of(0, 20)).stream()
                 .map(AdminPlaceResponse::from).toList();
+    }
+
+    public AdminPlacePageResponse places(long memberId, String query, PlacePublishStatus status, int page, int size) {
+        requireAdmin(memberId);
+        var result = places.findForAdmin(query == null ? "" : query.strip(), status, PageRequest.of(page, size));
+        return new AdminPlacePageResponse(result.map(AdminPlaceResponse::from).getContent(), page, size,
+                result.getTotalElements());
+    }
+
+    public AdminPlaceDetailResponse place(long memberId, long placeId) {
+        requireAdmin(memberId);
+        var place = places.findById(placeId)
+                .orElseThrow(() -> new BusinessException(PlaceErrorCode.PLACE_NOT_FOUND.getErrorCode()));
+        return AdminPlaceDetailResponse.from(place, details.findActivityResponses(placeId), details.findSources(placeId));
     }
 
     @Transactional

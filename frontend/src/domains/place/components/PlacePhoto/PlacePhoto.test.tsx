@@ -27,6 +27,15 @@ describe('장소 사진과 출처', () => {
     expect(screen.queryByRole('img')).toBeNull();
   });
 
+  it.each([1, 3])('간략 표기에서 제공기관명으로 출처를 연결하고 제%s유형을 표시한다', type => {
+    render(<PlacePhotoCredit place={{ ...place, imageLicense: `Type${type}` }} compact />);
+    const source = screen.getByRole('link', { name: '© 한국관광공사' });
+    expect(source.getAttribute('href')).toBe(place.imageSourceUrl);
+    expect(source.getAttribute('title')).toBe(place.imageAttribution);
+    expect(screen.queryByRole('link', { name: '사진 출처' })).toBeNull();
+    expect(screen.getByRole('link', { name: `공공누리 제${type}유형` }).getAttribute('href')).toContain(`licenseType${type}`);
+  });
+
   it('권리정보가 없거나 허용하지 않은 이미지 URL이면 요청하지 않는다', () => {
     for (const patch of [{ imageLicense: null }, { imageAttribution: null }, { representativeImage: 'https://evil.example/image.jpg' },
       { representativeImage: place.representativeImage + '?key=secret' }, { imageSourceUrl: 'javascript:alert(1)' }]) {

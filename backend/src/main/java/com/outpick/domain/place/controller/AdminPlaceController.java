@@ -1,17 +1,21 @@
 package com.outpick.domain.place.controller;
 
 import com.outpick.domain.member.security.MemberSessionPrincipal;
+import com.outpick.domain.place.dto.AdminPlaceDetailResponse;
 import com.outpick.domain.place.dto.AdminPlaceNoticePageResponse;
 import com.outpick.domain.place.dto.AdminPlaceNoticeRequest;
 import com.outpick.domain.place.dto.AdminPlaceNoticeResponse;
 import com.outpick.domain.place.dto.AdminPlaceNoticeVisibilityRequest;
+import com.outpick.domain.place.dto.AdminPlacePageResponse;
 import com.outpick.domain.place.dto.AdminPlaceRequest;
 import com.outpick.domain.place.dto.AdminPlaceResponse;
+import com.outpick.domain.place.entity.PlacePublishStatus;
 import com.outpick.domain.place.service.AdminPlaceService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -39,9 +43,25 @@ public class AdminPlaceController {
         return service.summary(memberId(authentication));
     }
 
-    @GetMapping("/places")
-    public List<AdminPlaceResponse> places(Authentication authentication) {
+    /** 기존 장소 관리 화면의 매개변수 없는 요청에는 최근 등록 목록을 배열로 반환합니다. */
+    @GetMapping(path = "/places", params = {"!query", "!status", "!page", "!size"})
+    public List<AdminPlaceResponse> recentPlaces(Authentication authentication) {
         return service.recentPlaces(memberId(authentication));
+    }
+
+    @GetMapping("/places")
+    public AdminPlacePageResponse places(
+            @RequestParam(required = false) @Size(max = 100) String query,
+            @RequestParam(required = false) PlacePublishStatus status,
+            @RequestParam(defaultValue = "0") @Min(0) @Max(1_000_000) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size,
+            Authentication authentication) {
+        return service.places(memberId(authentication), query, status, page, size);
+    }
+
+    @GetMapping("/places/{placeId}")
+    public AdminPlaceDetailResponse place(@PathVariable @Positive long placeId, Authentication authentication) {
+        return service.place(memberId(authentication), placeId);
     }
 
     @PostMapping("/places")

@@ -33,12 +33,19 @@ export default function PlacePhoto({ place }: { place: PlaceSummary }) {
 }
 
 /** 카드 선택 버튼 밖에 배치해 링크를 중첩하지 않는다. */
-export function PlacePhotoCredit({ place }: { place: PlaceSummary }) {
+export function PlacePhotoCredit({ place, className = 'mx-3 my-2 text-[11px]/[1.6]', compact = false }: {
+  place: PlaceSummary;
+  className?: string;
+  compact?: boolean;
+}) {
   const photo = getPlacePhoto(place);
   if (!photo) return null;
   const type = photo.license === 'Type3' ? '3' : '1';
-  return <p className="mx-3 my-2 text-[11px]/[1.6] wrap-anywhere text-[#5b687d] [&>a]:text-[#4552a0] [&>a]:underline [&>a]:underline-offset-2">
-    {photo.attribution} · <a href={photo.source} target="_blank" rel="noopener noreferrer">사진 출처</a> ·{' '}
+  return <p className={`wrap-anywhere text-[#5b687d] [&>a]:text-[#4552a0] [&>a]:underline [&>a]:underline-offset-2 ${className}`}>
+    {!compact && `${photo.attribution} · `}
+    <a href={photo.source} target="_blank" rel="noopener noreferrer" title={compact ? photo.attribution : undefined}>
+      {compact ? '© 한국관광공사' : '사진 출처'}
+    </a> ·{' '}
     <a href={`https://www.kogl.or.kr/info/licenseType${type}.do`} target="_blank" rel="noopener noreferrer">공공누리 제{type}유형</a>
   </p>;
 }
