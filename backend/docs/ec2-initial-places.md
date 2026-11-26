@@ -11,7 +11,7 @@
 | `scripts/init-places.sh` | 접속 확인·수집·공개·조회를 순서대로 실행 |
 | `compose.deploy.yaml` | 배포 DB와 Backend 이미지·연결 설정 |
 | `compose.places.yaml` | 수집용 임시 컨테이너에 `TOUR_API_KEY` 전달 |
-| `backend/scripts/review-initial-tour-places.sql` | 기존 검수 내용과 조건에 맞는 초기 5곳만 공개 |
+| `backend/scripts/review-initial-tour-places.sql` | 초기 검수 장소 최대 5곳과 선정된 지도 검증용 TourAPI 초안 최대 495곳 공개 |
 | `.env` | DB 접속 설정과 TourAPI 키 |
 
 전체 업로드 명령은 [배포 안내 2번](../../infra/deploy.md#2-전체-배포-파일-업로드), 실행 명령은 [8번](../../infra/deploy.md#8-초기-장소-준비)에 있다. EC2에 Node.js·Java·Make를 별도로 설치할 필요는 없다.
@@ -19,8 +19,8 @@
 ## 처리 흐름과 결과
 
 1. DB 접속을 확인한다. `db_connection_ok` 값 `1`은 접속 성공이다.
-2. 기존 서비스와 별도로 일회성 Backend 컨테이너에서 초기 5곳을 수집한다.
-3. 기존 공개 SQL을 적용한다. 실행 당일에 시설을 새로 검수했다는 의미는 아니다.
+2. 기존 서비스와 별도로 일회성 Backend 컨테이너에서 TourAPI 후보 500곳을 수집한다.
+3. 로컬 초기화와 같은 SQL로 초기 검수 장소와 지도 검증용 장소를 공개한다.
 4. 수집 이력과 연결된 장소를 조회한다.
 
 | 출력 | 의미 |
@@ -28,13 +28,14 @@
 | `CREATED` | 해당 장소 신규 저장 |
 | `SKIPPED` | 이미 수집한 장소라 건너뜀 |
 | `FAILED` | 해당 장소 수집 실패 |
-| `published_this_run` | 이번 SQL 실행에서 공개한 장소 수 |
+| `published_this_run` | 이번에 공개한 초기 검수 장소 수 |
+| `published_map_test_this_run` | 이번에 공개한 지도 검증용 장소 수 |
 | `publish_status = 0` | 공개 전 상태 |
 | `publish_status = 1` | 공개 상태 |
 
-이미 공개한 장소만 있다면 `published_this_run = 0`도 정상이다. 공개 SQL은 이름·주소·홈페이지 등 예상 값과 일치하는 미검수 DRAFT만 처리한다. 수정했거나 검수·공개한 장소는 건너뛴다. 검수 대상과 한계는 [초기 검수 기록](tour-api-import.md#2026-11-16-로컬-초기-공개)에 있다.
+이미 공개한 장소만 있다면 두 공개 건수 모두 0이다. 초기 검수 장소는 이름·주소·홈페이지 등 예상 값과 일치하는 미검수 초안을 처리한다. 지도 검증용 장소는 선정한 콘텐츠 ID의 TourAPI 초안만 공개하며 게시 상태만 변경한다. [초기 검수 기록](tour-api-import.md#2026-11-16-로컬-초기-공개)
 
-이 작업은 다른 장소를 삭제하거나 이미 수집한 데이터를 덮어쓰지 않는다. 초기 5곳의 공개만 다루며, 후속 필터·이미지 SQL이나 DB 전체 복원은 실행하지 않는다. 앱 재배포 때마다 실행할 필요는 없다.
+기존 50곳이 공개된 DB에서 최신 Backend 이미지와 공개 SQL로 실행하면 새 대상 450곳을 수집·공개한다.
 
 ## 실패했을 때 확인
 

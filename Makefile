@@ -37,7 +37,7 @@ help:
 	@echo "make compose-reset                Delete local DB data and restart (confirmation required)"
 	@echo "make places-import                Collect initial TourAPI places into local DB as drafts"
 	@echo "make places-list                  Show imported places and publication status"
-	@echo "make places-publish-initial       Publish matching initial places with existing review SQL"
+	@echo "make places-publish-initial       Publish reviewed initial places and local map test places"
 	@echo "make places-init                  Start local DB, collect, publish and list (keep existing data)"
 	@echo "make mysql-shell                  Open local MySQL shell"
 	@echo "-------------------------------"

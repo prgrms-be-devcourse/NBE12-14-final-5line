@@ -13,7 +13,7 @@ public class TourApiImportCommand {
                 .web(WebApplicationType.NONE).run("--spring.profiles.active=local")) {
             var service = new TourApiImportService(new TourApiClient(transport), new TourApiNormalizer(),
                     context.getBean(TourImportWriter.class));
-            var results = service.importPlaces(TourImportTarget.initialFive());
+            var results = service.importPlaces(TourImportTarget.initialPlaces());
             results.forEach(result -> System.out.printf("TOUR_IMPORT contentId=%s status=%s placeId=%s reason=%s%n",
                     result.contentId(), result.status(), result.placeId(), result.reason()));
             failed = results.stream().anyMatch(result -> result.status() == TourImportResult.Status.FAILED);

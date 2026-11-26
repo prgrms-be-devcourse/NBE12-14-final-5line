@@ -1,5 +1,8 @@
 # 인증서를 발급하거나 복원한 후 compose.deploy.yaml 뒤에 함께 지정합니다.
 services:
+  backend:
+    environment:
+      SERVER_FORWARDHEADERSSTRATEGY: native
   nginx:
     ports:
       - "443:443"

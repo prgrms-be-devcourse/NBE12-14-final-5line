@@ -1,0 +1,2 @@
+.outpick-mapPin { padding: 9px 12px; border: 1px solid #dfe4ed; border-radius: 9px; background: #fff; color: #16243b; box-shadow: 0 3px 12px #16243b26; font-size: 12px !important; font-weight: 700 !important; white-space: nowrap; }
+.outpick-mapPin[aria-pressed='true'] { border-color: #5147ff; background: #5147ff; color: #fff; }

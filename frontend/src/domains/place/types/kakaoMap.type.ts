@@ -3,6 +3,7 @@ export type KakaoLatLng = { getLat(): number; getLng(): number };
 export type PlaceMapBounds = { south: number; west: number; north: number; east: number };
 export type PlaceMapView = { lat: number; lng: number; level: number };
 export type PlaceMapItem = { id: number; name: string; latitude: number; longitude: number };
+export type PlaceMapSelection = { id: number; source: 'list' | 'map' | 'restore' };
 export type KakaoBounds = {
   extend(position: KakaoLatLng): void;
   getSouthWest(): KakaoLatLng;
@@ -15,15 +16,19 @@ export type KakaoMap = {
   setBounds(bounds: KakaoBounds, top?: number, right?: number, bottom?: number, left?: number): void;
   setCenter(position: KakaoLatLng): void;
   setLevel(level: number): void;
-  panTo(position: KakaoLatLng): void;
   relayout(): void;
   addControl(control: object, position: number): void;
 };
-export type KakaoOverlay = { setMap(map: KakaoMap | null): void; setZIndex(index: number): void };
+export type KakaoOverlay = {
+  setMap(map: KakaoMap | null): void;
+  setPosition(position: KakaoLatLng): void;
+  setZIndex(index: number): void;
+};
+type KakaoMapEvent = 'idle' | 'bounds_changed' | 'dragstart' | 'zoom_start';
 export type KakaoMapsApi = {
   event: {
-    addListener(map: KakaoMap, name: 'idle' | 'bounds_changed', handler: () => void): void;
-    removeListener(map: KakaoMap, name: 'idle' | 'bounds_changed', handler: () => void): void;
+    addListener(map: KakaoMap, name: KakaoMapEvent, handler: () => void): void;
+    removeListener(map: KakaoMap, name: KakaoMapEvent, handler: () => void): void;
   };
   load(callback: () => void): void;
   Map: new (element: HTMLElement, options: { center: KakaoLatLng; level: number }) => KakaoMap;

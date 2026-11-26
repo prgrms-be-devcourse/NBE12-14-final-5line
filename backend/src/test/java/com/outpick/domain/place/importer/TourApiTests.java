@@ -3,6 +3,7 @@ package com.outpick.domain.place.importer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -60,6 +61,23 @@ class TourApiTests {
         assertThat(result.regionCode()).isEqualTo("KR-41");
         assertThat(result.districtCode()).isEqualTo("KR-41390");
         assertThat(result.originUpdatedAt().getYear()).isEqualTo(2026);
+    }
+
+    @ParameterizedTest
+    @DisplayName("TourAPI 광주·전남과 세종 응답을 상위 지역 및 하위 지역으로 저장할 수 있다")
+    @CsvSource({
+            "12, 300, 전남광주통합특별시 북구 대천로 86, KR-12, 전남광주통합특별시, KR-12300, 북구",
+            "36110, 36110, 세종특별자치시 정안세종로 1569, KR-36, 세종, KR-36110, 세종시"
+    })
+    void normalizesRegionalCodes(String region, String district, String address, String regionCode, String regionName,
+                                 String districtCode, String districtName) {
+        var response = new TourApiPlace("1", "28", "테스트 시설", address, "", "127.1", "36.5", "",
+                "", "", region, district, "");
+        var result = new TourApiNormalizer().normalize(target("1"), response);
+        assertThat(result.regionCode()).isEqualTo(regionCode);
+        assertThat(result.regionName()).isEqualTo(regionName);
+        assertThat(result.districtCode()).isEqualTo(districtCode);
+        assertThat(result.districtName()).isEqualTo(districtName);
     }
 
     @Test

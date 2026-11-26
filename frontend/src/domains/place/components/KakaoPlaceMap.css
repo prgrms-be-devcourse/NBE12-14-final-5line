@@ -1,8 +1,0 @@
-.outpick-mapStage { position: relative; width: 100%; height: 100%; min-height: 400px; background: #edf1f5; }
-.outpick-mapCanvas { position: absolute; inset: 0; }
-.outpick-mapDisclaimer { position: absolute; top: 16px; left: 16px; z-index: 2; padding: 8px 12px; border-radius: 8px; background: #fffffff0; color: #596a7e; font-size: 11px; box-shadow: 0 2px 8px #16243b12; pointer-events: none; }
-.outpick-mapMessage { position: absolute; top: 28%; left: 18px; right: 18px; z-index: 3; padding: 20px; border: 1px solid #e4e9f1; border-radius: 12px; background: #fffffff5; color: #63718a; font-size: 13px; line-height: 1.8; text-align: center; }
-.outpick-mapMessage p + p { margin-top: 8px; font-size: 11px; }
-.outpick-mapMessage button { margin-top: 15px; padding: 9px 14px; border-radius: 8px; background: #5147ff; color: #fff; font-size: 12px; }
-.outpick-mapPin { padding: 9px 12px; border: 1px solid #dfe4ed; border-radius: 9px; background: #fff; color: #16243b; box-shadow: 0 3px 12px #16243b26; font-size: 12px !important; font-weight: 700 !important; white-space: nowrap; }
-.outpick-mapPin[aria-pressed='true'] { border-color: #5147ff; background: #5147ff; color: #fff; }

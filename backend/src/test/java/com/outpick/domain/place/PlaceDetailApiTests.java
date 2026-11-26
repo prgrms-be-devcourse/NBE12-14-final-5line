@@ -149,7 +149,28 @@ class PlaceDetailApiTests {
     void showsOnlyPublishedActiveNoticesWithVerifiedSources() throws Exception {
         mvc.perform(get("/api/v1/places/{id}", published.getId()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.notices", hasSize(2)))
-                .andExpect(jsonPath("$.notices[*].title", containsInAnyOrder("시작 경계", "기한 없음")));
+                .andExpect(jsonPath("$.notices[*].title", containsInAnyOrder("시작 경계", "기한 없음")))
+                .andExpect(jsonPath("$.notices[0].priority").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.notices[1].priority").doesNotHaveJsonPath());
+    }
+
+    @Test
+    @DisplayName("공지 전용 출처는 연결된 공지가 장소 상세에 표시되는 동안만 공개된다")
+    void exposesNoticeOnlySourcesForVisibleNotices() throws Exception {
+        var active = persist(SourceRecord.builder().place(published).url("https://example.com/active")
+                .verifiedFields(SourceRecord.VERIFIED_FIELD_NOTICE).verifiedAt(NOW).build());
+        var expired = persist(SourceRecord.builder().place(published).url("https://example.com/expired")
+                .verifiedFields(SourceRecord.VERIFIED_FIELD_NOTICE).verifiedAt(NOW).build());
+        notice(active, "유효한 공지", PlacePublishStatus.PUBLISHED, NOW, NOW.plusDays(1));
+        notice(expired, "종료된 공지", PlacePublishStatus.PUBLISHED, null, NOW);
+        em.flush();
+        em.clear();
+
+        mvc.perform(get("/api/v1/places/{id}", published.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notices[*].title", containsInAnyOrder("시작 경계", "기한 없음", "유효한 공지")))
+                .andExpect(jsonPath("$.sources[*].url",
+                        containsInAnyOrder("https://example.com/info", "https://example.com/active")));
     }
 
     @Test

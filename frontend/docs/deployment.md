@@ -32,7 +32,7 @@ docker compose -f compose.deploy.yaml logs --tail 100 backend
 
 `config --quiet`는 비밀번호를 포함한 설정을 출력하지 않고 검사한다. `run --rm --no-deps`는 다른 서비스를 시작하지 않고 임시 컨테이너에서 설정을 검사한 뒤 제거한다. `nginx -t`의 `test is successful`을 확인한다. `up -d --wait`는 백그라운드 실행 후 컨테이너 상태를 기다린다. Backend에는 healthcheck가 없으므로 `Started BackendApplication` 로그와 실제 API 응답으로 준비 완료를 확인한다.
 
-브라우저에서 `http://localhost/main-example/`을 연다. ID 1의 이름·참여 인원, ID 2의 오류 안내, 다시 조회와 새로고침을 확인한다.
+브라우저에서 `http://localhost/`를 열어 장소 검색 화면과 검색 결과를 확인한다. `http://localhost/login/`을 직접 열어 로그인 폼을 확인한다. 테스트용 관리자 계정이 있다면 로그인한 뒤 `http://localhost/admin/`을 열고, 새로고침 후에도 운영 현황이 표시되는지 확인한다.
 
 종료할 때는 다음 명령을 사용한다. MySQL 데이터 볼륨은 유지한다.
 

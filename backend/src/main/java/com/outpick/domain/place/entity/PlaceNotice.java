@@ -43,9 +43,6 @@ public class PlaceNotice {
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
-    @Column(name = "priority", length = 10)
-    private String priority;
-
     @Column(name = "valid_from", columnDefinition = "DATETIME")
     private LocalDateTime validFrom;
 
@@ -56,23 +53,43 @@ public class PlaceNotice {
     @Column(name = "publish_status", nullable = false)
     private PlacePublishStatus publishStatus = PlacePublishStatus.DRAFT;
 
+    @Column(name = "publication_request_id", length = 36, updatable = false)
+    private String publicationRequestId;
+
     @Builder
     public PlaceNotice(
             Place place,
             SourceRecord sourceRecord,
             String title,
             String content,
-            String priority,
             LocalDateTime validFrom,
             LocalDateTime validUntil,
-            PlacePublishStatus publishStatus) {
+            PlacePublishStatus publishStatus,
+            String publicationRequestId) {
         this.place = Objects.requireNonNull(place, "place");
         this.sourceRecord = Objects.requireNonNull(sourceRecord, "sourceRecord");
         this.title = title;
         this.content = content;
-        this.priority = priority;
         this.validFrom = validFrom;
         this.validUntil = validUntil;
         this.publishStatus = publishStatus == null ? PlacePublishStatus.DRAFT : publishStatus;
+        this.publicationRequestId = publicationRequestId;
+    }
+
+    public void revise(SourceRecord sourceRecord, String title, String content,
+                       LocalDateTime validFrom, LocalDateTime validUntil) {
+        this.sourceRecord = Objects.requireNonNull(sourceRecord, "sourceRecord");
+        this.title = title;
+        this.content = content;
+        this.validFrom = validFrom;
+        this.validUntil = validUntil;
+    }
+
+    public void publish() {
+        publishStatus = PlacePublishStatus.PUBLISHED;
+    }
+
+    public void hide() {
+        publishStatus = PlacePublishStatus.HIDDEN;
     }
 }

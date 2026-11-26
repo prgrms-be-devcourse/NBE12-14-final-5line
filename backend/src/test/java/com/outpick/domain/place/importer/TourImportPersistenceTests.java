@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -26,6 +28,36 @@ class TourImportPersistenceTests {
     @Autowired TourImportWriter writer;
     @Autowired JdbcTemplate jdbc;
     @Autowired TourOperatingInfoWriter operatingWriter;
+
+    @Test
+    @DisplayName("기존 50곳은 유지하고 전국 450곳을 초안으로 추가하며 재실행 시 중복 저장하지 않는다")
+    void importsExpandedTargetsAndSkipsThemOnRerun() {
+        var targets = TourImportTarget.initialPlaces();
+        assertThat(targets).hasSize(500).extracting(TourImportTarget::contentId).doesNotHaveDuplicates();
+        var byId = targets.stream().collect(Collectors.toMap(TourImportTarget::contentId, Function.identity()));
+        var client = new TourApiClient(id -> { throw new AssertionError("테스트에서 외부 API를 호출했습니다."); }) {
+            @Override
+            public TourApiPlace getPlace(String contentId) {
+                var target = byId.get(contentId);
+                return new TourApiPlace(contentId, "28", target.expectedName(), "서울특별시 광진구 테스트로 1", "",
+                        "127.03", "37.5", "", "", "", "11", "215", "");
+            }
+        };
+        var importer = new TourApiImportService(client, new TourApiNormalizer(), writer);
+
+        assertThat(importer.importPlaces(targets.subList(0, 50))).hasSize(50)
+                .allMatch(result -> result.status() == TourImportResult.Status.CREATED);
+        var expanded = importer.importPlaces(targets);
+        assertThat(expanded.stream().filter(result -> result.status() == TourImportResult.Status.CREATED)).hasSize(450);
+        assertThat(expanded.stream().filter(result -> result.status() == TourImportResult.Status.SKIPPED)).hasSize(50);
+        assertThat(importer.importPlaces(targets)).hasSize(500)
+                .allMatch(result -> result.status() == TourImportResult.Status.SKIPPED);
+        assertThat(expanded).allSatisfy(result -> assertThat(jdbc.queryForObject(
+                "select publish_status from place where place_id=?", Integer.class, result.placeId())).isZero());
+
+        long unclassified = writer.findExistingPlaceId("131139");
+        assertThat(jdbc.queryForObject("select count(*) from place_activity where place_id=?", Integer.class, unclassified)).isZero();
+    }
 
     @Test
     @DisplayName("운영 정보는 미검수로 최초 저장하고 재수집으로 검토 값을 덮어쓰지 않는다")
