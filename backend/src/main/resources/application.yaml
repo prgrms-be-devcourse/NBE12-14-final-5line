@@ -17,3 +17,11 @@ spring:
 logging:
   pattern:
     level: "%5p [requestId=%X{requestId:-}]"
+
+app:
+  auth:
+    jwt-secret: ${AUTH_JWT_SECRET_BASE64:}
+    cookie-secure: ${AUTH_COOKIE_SECURE:false}
+  login-limit:
+    max-failures: 5
+    window-minutes: 15

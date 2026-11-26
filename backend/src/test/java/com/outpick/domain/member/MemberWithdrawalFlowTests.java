@@ -15,7 +15,6 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.Container;
@@ -53,12 +52,9 @@ class MemberWithdrawalFlowTests {
     @Test
     @DisplayName("비밀번호와 최종 확인을 거친 탈퇴가 계정·토큰·기존 세션을 정리하는지 검증한다")
     void withdrawalRequiresConfirmationAndPasswordThenRemovesAccountTokensAndSessions() throws Exception {
-        var first = csrfSession();
-        mvc.perform(post("/api/v1/auth/signup").session(first.session()).header(first.header(), first.csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"leave@example.com\",\"password\":\"old-pass\",\"nickname\":\"tester\"}"))
-                .andExpect(status().isCreated());
-        login(first);
+        var first = AuthTestClient.create(mvc);
+        first.signup("leave@example.com", "old-pass", "tester");
+        first.login("leave@example.com", "old-pass");
         long placeId = transactions.execute(transaction -> {
             var region = Region.builder().name("탈퇴 테스트 지역").build();
             entityManager.persist(region);
@@ -67,34 +63,32 @@ class MemberWithdrawalFlowTests {
             entityManager.persist(place);
             return place.getId();
         });
-        mvc.perform(post("/api/v1/members/me/favorites").session(first.session()).header(first.header(), first.csrf())
+        mvc.perform(first.csrf(post("/api/v1/members/me/favorites"))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"placeId\":" + placeId + "}"))
                 .andExpect(status().isCreated());
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM favorite WHERE place_id = ?", Integer.class, placeId)).isEqualTo(1);
-        var reviewResponse = mvc.perform(post("/api/v1/places/{placeId}/reviews", placeId)
-                        .session(first.session()).header(first.header(), first.csrf())
+        var reviewResponse = mvc.perform(first.csrf(post("/api/v1/places/{placeId}/reviews", placeId))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"탈퇴 전 후기\"}"))
                 .andExpect(status().isCreated()).andReturn();
         long reviewId = ((Number) com.jayway.jsonpath.JsonPath.read(
                 reviewResponse.getResponse().getContentAsString(), "$.id")).longValue();
         var image = new ByteArrayOutputStream();
         ImageIO.write(new BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB), "png", image);
-        mvc.perform(multipart("/api/v1/reviews/{id}/photos", reviewId)
-                        .file(new MockMultipartFile("file", "visit.png", "image/png", image.toByteArray()))
-                        .session(first.session()).header(first.header(), first.csrf()))
+        mvc.perform(first.csrf(multipart("/api/v1/reviews/{id}/photos", reviewId)
+                        .file(new MockMultipartFile("file", "visit.png", "image/png", image.toByteArray()))))
                 .andExpect(status().isCreated());
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM review WHERE review_id = ?", Integer.class, reviewId)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM review_media WHERE review_id = ?", Integer.class, reviewId)).isEqualTo(1);
-        var second = csrfSession();
-        login(second);
+        var second = AuthTestClient.create(mvc);
+        second.login("leave@example.com", "old-pass");
         String token = resetService.request("leave@example.com").orElseThrow().token();
         assertThat(tokens.count()).isEqualTo(1);
 
-        mvc.perform(delete("/api/v1/members/me").session(first.session()).header(first.header(), first.csrf())
+        mvc.perform(first.csrf(delete("/api/v1/members/me"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"password\":\"old-pass\",\"confirmed\":false}"))
                 .andExpect(status().isBadRequest());
-        mvc.perform(delete("/api/v1/members/me").session(first.session()).header(first.header(), first.csrf())
+        mvc.perform(first.csrf(delete("/api/v1/members/me"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"password\":\"wrong\",\"confirmed\":true}"))
                 .andExpect(status().isBadRequest())
@@ -102,7 +96,7 @@ class MemberWithdrawalFlowTests {
         assertThat(members.findByEmail("leave@example.com")).isPresent();
         assertThat(resetService.isValid(token)).isTrue();
 
-        mvc.perform(delete("/api/v1/members/me").session(first.session()).header(first.header(), first.csrf())
+        mvc.perform(first.csrf(delete("/api/v1/members/me"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"password\":\"old-pass\",\"confirmed\":true}"))
                 .andExpect(status().isOk())
@@ -117,10 +111,10 @@ class MemberWithdrawalFlowTests {
         mvc.perform(get("/api/v1/places/{placeId}/reviews", placeId))
                 .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
         assertThat(resetService.isValid(token)).isFalse();
-        mvc.perform(get("/api/v1/members/me").session(second.session()))
+        mvc.perform(second.auth(get("/api/v1/members/me")))
                 .andExpect(status().isUnauthorized());
-        var fresh = csrfSession();
-        mvc.perform(post("/api/v1/auth/login").session(fresh.session()).header(fresh.header(), fresh.csrf())
+        var fresh = AuthTestClient.create(mvc);
+        mvc.perform(fresh.csrf(post("/api/v1/auth/login"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"leave@example.com\",\"password\":\"old-pass\"}"))
                 .andExpect(status().isUnauthorized());
@@ -129,10 +123,12 @@ class MemberWithdrawalFlowTests {
     @Test
     @DisplayName("후기 신고자가 탈퇴해도 신고 기록은 남고 신고자 연결은 제거된다")
     void withdrawalAnonymizesReporterWithoutDeletingReport() throws Exception {
-        var author = csrfSession();
-        signupAndLogin(author, "review-owner@example.com");
-        var reporter = csrfSession();
-        signupAndLogin(reporter, "review-reporter@example.com");
+        var author = AuthTestClient.create(mvc);
+        author.signup("review-owner@example.com", "old-pass", "tester");
+        author.login("review-owner@example.com", "old-pass");
+        var reporter = AuthTestClient.create(mvc);
+        reporter.signup("review-reporter@example.com", "old-pass", "tester");
+        reporter.login("review-reporter@example.com", "old-pass");
         long placeId = transactions.execute(transaction -> {
             var region = Region.builder().name("신고 테스트 지역").build();
             entityManager.persist(region);
@@ -141,20 +137,17 @@ class MemberWithdrawalFlowTests {
             entityManager.persist(place);
             return place.getId();
         });
-        var created = mvc.perform(post("/api/v1/places/{placeId}/reviews", placeId)
-                        .session(author.session()).header(author.header(), author.csrf())
+        var created = mvc.perform(author.csrf(post("/api/v1/places/{placeId}/reviews", placeId))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"신고 대상 후기\"}"))
                 .andExpect(status().isCreated()).andReturn();
         long reviewId = ((Number) com.jayway.jsonpath.JsonPath.read(
                 created.getResponse().getContentAsString(), "$.id")).longValue();
-        mvc.perform(post("/api/v1/reviews/{id}/reports", reviewId)
-                        .session(reporter.session()).header(reporter.header(), reporter.csrf())
+        mvc.perform(reporter.csrf(post("/api/v1/reviews/{id}/reports", reviewId))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"신고 사유\"}"))
                 .andExpect(status().isCreated());
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM review_report WHERE review_id = ?", Integer.class, reviewId)).isEqualTo(1);
 
-        mvc.perform(delete("/api/v1/members/me").session(reporter.session())
-                        .header(reporter.header(), reporter.csrf()).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(reporter.csrf(delete("/api/v1/members/me")).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"password\":\"old-pass\",\"confirmed\":true}"))
                 .andExpect(status().isOk());
 
@@ -162,33 +155,4 @@ class MemberWithdrawalFlowTests {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM review_report WHERE review_id = ? AND reporter_id IS NULL", Integer.class, reviewId)).isEqualTo(1);
     }
 
-    private void signupAndLogin(SessionCsrf session, String email) throws Exception {
-        mvc.perform(post("/api/v1/auth/signup").session(session.session()).header(session.header(), session.csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + email + "\",\"password\":\"old-pass\",\"nickname\":\"tester\"}"))
-                .andExpect(status().isCreated());
-        mvc.perform(post("/api/v1/auth/login").session(session.session()).header(session.header(), session.csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"" + email + "\",\"password\":\"old-pass\"}"))
-                .andExpect(status().isOk());
-    }
-
-    private void login(SessionCsrf session) throws Exception {
-        mvc.perform(post("/api/v1/auth/login").session(session.session()).header(session.header(), session.csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"leave@example.com\",\"password\":\"old-pass\"}"))
-                .andExpect(status().isOk());
-    }
-
-    private SessionCsrf csrfSession() throws Exception {
-        var response = mvc.perform(get("/api/v1/auth/csrf")).andExpect(status().isOk()).andReturn();
-        var session = (MockHttpSession) response.getRequest().getSession(false);
-        String body = response.getResponse().getContentAsString();
-        return new SessionCsrf(session,
-                com.jayway.jsonpath.JsonPath.read(body, "$.headerName"),
-                com.jayway.jsonpath.JsonPath.read(body, "$.token"));
-    }
-
-    private record SessionCsrf(MockHttpSession session, String header, String csrf) {
-    }
 }

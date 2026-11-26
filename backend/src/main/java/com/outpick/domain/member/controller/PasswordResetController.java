@@ -2,6 +2,7 @@ package com.outpick.domain.member.controller;
 
 import com.outpick.domain.member.dto.PasswordResetConfirmRequest;
 import com.outpick.domain.member.dto.PasswordResetRequest;
+import com.outpick.domain.member.dto.PasswordResetValidateRequest;
 import com.outpick.domain.member.exception.MemberErrorCode;
 import com.outpick.domain.member.service.PasswordResetMailer;
 import com.outpick.domain.member.service.PasswordResetService;
@@ -13,11 +14,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mail.MailException;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -45,12 +44,12 @@ public class PasswordResetController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("message", REQUEST_MESSAGE));
     }
 
-    @GetMapping("/validate")
-    public ResponseEntity<Void> validate(@RequestParam String token) {
-        if (!service.isValid(token)) {
+    @PostMapping("/validate")
+    public ResponseEntity<Void> validate(@Valid @RequestBody PasswordResetValidateRequest request) {
+        if (!service.isValid(request.token())) {
             throw new BusinessException(MemberErrorCode.RESET_LINK_INVALID.getErrorCode());
         }
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.noContent().header("Cache-Control", "no-store").build();
     }
 
     @PostMapping("/confirm")

@@ -8,6 +8,7 @@ import { confirmPasswordReset, login, requestPasswordReset, signup, validatePass
 import { setCurrentMember } from '../queries/currentMemberQuery';
 import AccountFrame from './AccountFrame';
 import FloatingField from './FloatingField';
+import { consumeResetToken } from './consumeResetToken';
 
 const panelClassName = `account-panel rounded-[27px] border border-[#e5e3ed] bg-white p-5
   shadow-[0_24px_70px_-49px_#1d204a80,0_2px_8px_#1d204a0a] min-[401px]:p-[30px]`;
@@ -140,7 +141,8 @@ export function ResetRequestScreen() {
 
 export function ResetConfirmScreen() {
   const router = useRouter();
-  const token = useSearchParams().get('token') ?? '';
+  const [token, setToken] = useState('');
+  const [tokenReady, setTokenReady] = useState(false);
   const [valid, setValid] = useState<boolean | null>(null);
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -149,11 +151,18 @@ export function ResetConfirmScreen() {
   const [error, setError] = useState('');
   const [confirmationError, setConfirmationError] = useState('');
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setToken(consumeResetToken(window.location, window.history));
+      setTokenReady(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+  useEffect(() => {
     let active = true;
-    if (!token) return;
+    if (!tokenReady || !token) return;
     validatePasswordReset(token).then(() => { if (active) setValid(true); }).catch(() => { if (active) setValid(false); });
     return () => { active = false; };
-  }, [token]);
+  }, [tokenReady, token]);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (password !== confirmation) { setConfirmationError('새 비밀번호가 일치하지 않습니다.'); return; }
@@ -163,8 +172,8 @@ export function ResetConfirmScreen() {
     finally { setBusy(false); }
   }
   return <AccountFrame><Header step="NEW PASSWORD" title="새 비밀번호 설정" description="새 비밀번호를 입력하고 다시 한번 확인해 주세요." />
-    <div className={panelClassName}>{!token || valid === false ? <p className={errorClassName} role="alert">재설정 링크가 유효하지 않습니다. 새 링크를 요청해 주세요.</p>
-      : valid === null ? <p role="status">재설정 링크를 확인하고 있습니다...</p>
+    <div className={panelClassName}>{!tokenReady || (token && valid === null) ? <p role="status">재설정 링크를 확인하고 있습니다...</p>
+      : !token || valid === false ? <p className={errorClassName} role="alert">재설정 링크가 유효하지 않습니다. 새 링크를 요청해 주세요.</p>
         : <form className={formClassName} onSubmit={submit}>
           <FloatingField label="새 비밀번호" type="password" value={password} onChange={value => { setPassword(value); setConfirmationError(''); }} autoComplete="new-password" minLength={8} maxLength={64} disabled={busy || success} />
           <p className={fieldNoteClassName}>비밀번호는 8~64자로 입력해 주세요.</p>

@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.mock.web.MockHttpSession;
+import com.outpick.domain.member.AuthTestClient;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.test.web.servlet.MockMvc;
@@ -79,7 +79,7 @@ class NotificationInboxApiTests {
         addNotification(103, 51, 1002, NOW, null);
         addNotification(104, 53, 1001, createdAt.minusDays(1), null);
 
-        mvc.perform(get(INBOX).session(owner).param("size", "1"))
+        mvc.perform(get(INBOX).cookie(owner.cookies()).param("size", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page").value(0))
                 .andExpect(jsonPath("$.size").value(1))
@@ -95,36 +95,36 @@ class NotificationInboxApiTests {
                 .andExpect(jsonPath("$.items[0].sourceUrl").value(nullValue()))
                 .andExpect(jsonPath("$.items[0].noticeAvailable").value(true));
 
-        mvc.perform(get(INBOX).session(owner).param("page", "1").param("size", "1"))
+        mvc.perform(get(INBOX).cookie(owner.cookies()).param("page", "1").param("size", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].notificationId").value(101))
                 .andExpect(jsonPath("$.items[0].readAt").value(nullValue()))
                 .andExpect(jsonPath("$.items[0].sourceUrl").value("https://example.com/holiday"));
 
-        mvc.perform(get(INBOX).session(owner).param("page", "2").param("size", "1"))
+        mvc.perform(get(INBOX).cookie(owner.cookies()).param("page", "2").param("size", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].notificationId").value(104))
                 .andExpect(jsonPath("$.items[0].noticeAvailable").value(true))
                 .andExpect(jsonPath("$.items[0].sourceUrl").value(nullValue()));
 
-        mvc.perform(get(INBOX).session(owner).param("page", "3").param("size", "1"))
+        mvc.perform(get(INBOX).cookie(owner.cookies()).param("page", "3").param("size", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(3))
                 .andExpect(jsonPath("$.items").isEmpty());
 
-        mvc.perform(get(INBOX).session(other))
+        mvc.perform(get(INBOX).cookie(other.cookies()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.size").value(20))
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.items[0].notificationId").value(103));
 
-        mvc.perform(get(INBOX).session(owner).param("unreadOnly", "true").param("size", "1"))
+        mvc.perform(get(INBOX).cookie(owner.cookies()).param("unreadOnly", "true").param("size", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(2))
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].notificationId").value(101));
 
-        mvc.perform(get(INBOX).session(owner).param("unreadOnly", "true").param("page", "1").param("size", "1"))
+        mvc.perform(get(INBOX).cookie(owner.cookies()).param("unreadOnly", "true").param("page", "1").param("size", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(2))
                 .andExpect(jsonPath("$.items[0].notificationId").value(104));
@@ -145,7 +145,7 @@ class NotificationInboxApiTests {
         jdbc.update("UPDATE source_record SET verified_at = NULL WHERE source_record_id = 55");
         jdbc.update("UPDATE place_notice SET valid_from = ? WHERE place_notice_id = 56", NOW);
 
-        var result = mvc.perform(get(INBOX).session(owner))
+        var result = mvc.perform(get(INBOX).cookie(owner.cookies()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(6))
                 .andExpect(jsonPath("$.items[0].notificationId").value(56))
@@ -168,16 +168,16 @@ class NotificationInboxApiTests {
         mvc.perform(get(INBOX)).andExpect(status().isUnauthorized());
 
         var owner = signIn(1001);
-        mvc.perform(get(INBOX).session(owner))
+        mvc.perform(get(INBOX).cookie(owner.cookies()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items").isEmpty())
                 .andExpect(jsonPath("$.totalElements").value(0));
 
-        mvc.perform(get(INBOX).session(owner).param("page", "-1"))
+        mvc.perform(get(INBOX).cookie(owner.cookies()).param("page", "-1"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.fieldErrors[0].field").value("page"));
-        mvc.perform(get(INBOX).session(owner).param("size", "51"))
+        mvc.perform(get(INBOX).cookie(owner.cookies()).param("size", "51"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors[0].field").value("size"));
     }
@@ -202,7 +202,7 @@ class NotificationInboxApiTests {
         assertThat(storedReadAt(101)).isEqualTo(NOW);
         assertThat(storedReadAt(102)).isEqualTo(alreadyReadAt);
 
-        mvc.perform(get(INBOX).session(owner))
+        mvc.perform(get(INBOX).cookie(owner.cookies()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].readAt").value(NOW.toString()))
                 .andExpect(jsonPath("$.items[1].readAt").value(alreadyReadAt.toString()));
@@ -217,8 +217,8 @@ class NotificationInboxApiTests {
         addNotification(101, 51, 1001, NOW.minusMinutes(2), null);
         addNotification(102, 51, 1002, NOW.minusMinutes(2), null);
 
-        mvc.perform(markRead(new MockHttpSession(), 101)).andExpect(status().isUnauthorized());
-        mvc.perform(patch(INBOX + "/{notificationId}/read", 101).session(owner))
+        mvc.perform(markRead(AuthTestClient.create(mvc), 101)).andExpect(status().isUnauthorized());
+        mvc.perform(patch(INBOX + "/{notificationId}/read", 101).cookie(owner.cookies()))
                 .andExpect(status().isForbidden());
         mvc.perform(markRead(owner, 0))
                 .andExpect(status().isBadRequest())
@@ -277,9 +277,9 @@ class NotificationInboxApiTests {
         addNotification(101, 51, 1002, NOW.minusMinutes(2), null);
 
         mvc.perform(get(INBOX + "/unread-status")).andExpect(status().isUnauthorized());
-        mvc.perform(markAllRead(new MockHttpSession())).andExpect(status().isUnauthorized());
-        mvc.perform(patch(INBOX + "/read-all").session(owner)).andExpect(status().isForbidden());
-        mvc.perform(get(INBOX + "/unread-status").session(owner))
+        mvc.perform(markAllRead(AuthTestClient.create(mvc))).andExpect(status().isUnauthorized());
+        mvc.perform(patch(INBOX + "/read-all").cookie(owner.cookies())).andExpect(status().isForbidden());
+        mvc.perform(get(INBOX + "/unread-status").cookie(owner.cookies()))
                 .andExpect(status().isOk())
                 .andExpect(content().json("{\"hasUnread\":true}"));
         mvc.perform(markAllRead(owner))
@@ -288,10 +288,10 @@ class NotificationInboxApiTests {
         mvc.perform(markAllRead(owner))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.updatedCount").value(0));
-        mvc.perform(get(INBOX + "/unread-status").session(owner))
+        mvc.perform(get(INBOX + "/unread-status").cookie(owner.cookies()))
                 .andExpect(status().isOk())
                 .andExpect(content().json("{\"hasUnread\":false}"));
-        mvc.perform(get(INBOX + "/unread-status").session(other))
+        mvc.perform(get(INBOX + "/unread-status").cookie(other.cookies()))
                 .andExpect(status().isOk())
                 .andExpect(content().json("{\"hasUnread\":true}"));
         assertThat(storedReadAt(51)).isEqualTo(NOW);
@@ -324,20 +324,12 @@ class NotificationInboxApiTests {
         assertThat(storedReadAt(202)).isEqualTo(NOW);
     }
 
-    private MockHttpServletRequestBuilder markRead(MockHttpSession session, long notificationId) throws Exception {
-        return withCsrf(session, patch(INBOX + "/{notificationId}/read", notificationId));
+    private MockHttpServletRequestBuilder markRead(AuthTestClient client, long notificationId) {
+        return client.csrf(patch(INBOX + "/{notificationId}/read", notificationId));
     }
 
-    private MockHttpServletRequestBuilder markAllRead(MockHttpSession session) throws Exception {
-        return withCsrf(session, patch(INBOX + "/read-all"));
-    }
-
-    private MockHttpServletRequestBuilder withCsrf(MockHttpSession session,
-                                                  MockHttpServletRequestBuilder request) throws Exception {
-        var csrf = mvc.perform(get("/api/v1/auth/csrf").session(session)).andReturn();
-        var csrfData = JsonPath.parse(csrf.getResponse().getContentAsString());
-        return request.session(session)
-                .header(csrfData.<String>read("$.headerName"), csrfData.<String>read("$.token"));
+    private MockHttpServletRequestBuilder markAllRead(AuthTestClient client) {
+        return client.csrf(patch(INBOX + "/read-all"));
     }
 
     private LocalDateTime storedReadAt(long notificationId) {
@@ -345,24 +337,16 @@ class NotificationInboxApiTests {
                 LocalDateTime.class, notificationId);
     }
 
-    private MockHttpSession signIn(long memberId) throws Exception {
+    private AuthTestClient signIn(long memberId) throws Exception {
         String email = "inbox-" + memberId + "@example.com";
         String password = "test-password";
         jdbc.update("""
                 INSERT INTO `user` (user_id, email, nickname, password_hash, created_at, updated_at)
                 VALUES (?, ?, '알림 테스트', ?, ?, ?)
                 """, memberId, email, passwordEncoder.encode(password), NOW, NOW);
-        var csrf = mvc.perform(get("/api/v1/auth/csrf")).andReturn();
-        var session = (MockHttpSession) csrf.getRequest().getSession(false);
-        var csrfData = JsonPath.parse(csrf.getResponse().getContentAsString());
-        mvc.perform(post("/api/v1/auth/login").session(session)
-                        .header(csrfData.<String>read("$.headerName"), csrfData.<String>read("$.token"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"%s","password":"%s"}
-                                """.formatted(email, password)))
-                .andExpect(status().isOk());
-        return session;
+        var client = AuthTestClient.create(mvc);
+        client.login(email, password);
+        return client;
     }
 
     private void createNotice(long id, String title, String url, LocalDateTime verifiedAt) {

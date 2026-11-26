@@ -11,6 +11,69 @@ describe('공통 HTTP 클라이언트', () => {
     expect(apiClient.defaults.timeout).toBe(10_000);
   });
 
+  it('회원 요청의 401에서 한 번 갱신하고 원래 요청을 재시도한다', async () => {
+    let attempts = 0;
+    let refreshes = 0;
+    server.use(
+      http.get('https://api.outpick.test/api/v1/auth/csrf', () =>
+        HttpResponse.json({ token: 'csrf', headerName: 'X-CSRF-TOKEN' })),
+      http.post('https://api.outpick.test/api/v1/auth/refresh', ({ request }) => {
+        expect(request.headers.get('X-CSRF-TOKEN')).toBe('csrf');
+        refreshes += 1;
+        return new HttpResponse(null, { status: 204 });
+      }),
+      http.get('https://api.outpick.test/api/v1/members/me', () => {
+        attempts += 1;
+        return attempts === 1 ? new HttpResponse(null, { status: 401 })
+          : HttpResponse.json({ id: 1, email: 'member@example.com', nickname: '회원' });
+      })
+    );
+    await expect(apiClient.get('/api/v1/members/me')).resolves.toMatchObject({ data: { id: 1 } });
+    expect(attempts).toBe(2);
+    expect(refreshes).toBe(1);
+  });
+
+  it('갱신도 실패하면 원래 401을 전달하고 무한 재시도하지 않는다', async () => {
+    let attempts = 0;
+    server.use(
+      http.get('https://api.outpick.test/api/v1/auth/csrf', () =>
+        HttpResponse.json({ token: 'csrf', headerName: 'X-CSRF-TOKEN' })),
+      http.post('https://api.outpick.test/api/v1/auth/refresh', () => new HttpResponse(null, { status: 401 })),
+      http.get('https://api.outpick.test/api/v1/members/me', () => {
+        attempts += 1;
+        return new HttpResponse(null, { status: 401 });
+      })
+    );
+    await expect(apiClient.get('/api/v1/members/me')).rejects.toMatchObject({
+      details: { kind: 'http', status: 401 },
+    });
+    expect(attempts).toBe(1);
+  });
+
+  it('동시에 만료된 요청은 갱신 요청 한 번을 공유한다', async () => {
+    let refreshes = 0;
+    let authenticated = false;
+    server.use(
+      http.get('https://api.outpick.test/api/v1/auth/csrf', () =>
+        HttpResponse.json({ token: 'csrf', headerName: 'X-CSRF-TOKEN' })),
+      http.post('https://api.outpick.test/api/v1/auth/refresh', async () => {
+        refreshes += 1;
+        await delay(20);
+        authenticated = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
+      http.get('https://api.outpick.test/api/v1/members/me', () =>
+        authenticated ? HttpResponse.json({ id: 1 }) : new HttpResponse(null, { status: 401 }))
+    );
+    const [first, second] = await Promise.all([
+      apiClient.get('/api/v1/members/me'),
+      apiClient.get('/api/v1/members/me'),
+    ]);
+    expect(first.data.id).toBe(1);
+    expect(second.data.id).toBe(1);
+    expect(refreshes).toBe(1);
+  });
+
   it('HTML 오류 응답은 본문을 노출하지 않고 상태와 공통 안내를 반환한다', async () => {
     server.use(http.get(url, () => new HttpResponse('<html>proxy error</html>', {
       status: 502,

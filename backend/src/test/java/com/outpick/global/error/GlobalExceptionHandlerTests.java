@@ -114,7 +114,7 @@ class GlobalExceptionHandlerTests {
     }
 
     @Test
-    @DisplayName("예상치 못한 예외는 500과 공통 안내 문구를 반환하고 원인과 요청 ID를 로그에 남긴다")
+    @DisplayName("예상치 못한 예외는 500과 공통 안내를 반환하고 민감한 예외 문구는 로그에 남기지 않는다")
     void unexpectedErrorHidesInternalDetailsAndLogsRequestId(CapturedOutput output) throws Exception {
         ResultActions result = mockMvc.perform(get("/test/unexpected"))
                 .andExpect(status().isInternalServerError())
@@ -123,7 +123,8 @@ class GlobalExceptionHandlerTests {
                 .andExpect(jsonPath("$.detail").value("서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."));
         String requestId = assertRequestIdMatchesHeader(result);
         assertThat(result.andReturn().getResponse().getContentAsString()).doesNotContain("internal diagnostic");
-        assertThat(output.getAll()).contains("requestId=" + requestId, "internal diagnostic");
+        assertThat(output.getAll()).contains("requestId=" + requestId, "type=IllegalStateException", "origin=")
+                .doesNotContain("internal diagnostic");
         assertThat(MDC.get(RequestIdFilter.REQUEST_ID)).isNull();
     }
 
