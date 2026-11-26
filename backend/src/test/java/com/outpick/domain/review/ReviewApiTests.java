@@ -1,5 +1,6 @@
 package com.outpick.domain.review;
 
+import com.outpick.domain.member.AuthTestClient;
 import com.jayway.jsonpath.JsonPath;
 import com.outpick.domain.place.entity.Place;
 import com.outpick.domain.place.entity.PlacePublishStatus;
@@ -80,15 +81,11 @@ class ReviewApiTests {
         var member = login("review-guard@example.com");
         long published = createPlace(PlacePublishStatus.PUBLISHED);
         long hidden = createPlace(PlacePublishStatus.HIDDEN);
-        var guestCsrf = mvc.perform(get("/api/v1/auth/csrf")).andExpect(status().isOk()).andReturn();
-        var guestSession = (MockHttpSession) guestCsrf.getRequest().getSession(false);
-        String guestToken = guestCsrf.getResponse().getContentAsString();
-        mvc.perform(post("/api/v1/places/{placeId}/reviews", published).session(guestSession)
-                        .header(JsonPath.read(guestToken, "$.headerName"),
-                                (String) JsonPath.read(guestToken, "$.token"))
+        var guest = AuthTestClient.create(mvc);
+        mvc.perform(guest.withCsrf(post("/api/v1/places/{placeId}/reviews", published))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"후기\"}"))
                 .andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/v1/places/{placeId}/reviews", published).session(member.session())
+        mvc.perform(post("/api/v1/places/{placeId}/reviews", published).cookie(member.cookies())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"후기\"}"))
                 .andExpect(status().isForbidden());
         mvc.perform(member.withCsrf(post("/api/v1/places/{placeId}/reviews", published)
@@ -120,9 +117,9 @@ class ReviewApiTests {
         mvc.perform(reporter.withCsrf(post("/api/v1/reviews/{id}/reports", reviewId)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"중복 신고\"}")))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("REPORT_ALREADY_EXISTS"));
-        mvc.perform(get("/api/v1/admin/review-reports").session(reporter.session()))
+        mvc.perform(get("/api/v1/admin/review-reports").cookie(reporter.cookies()))
                 .andExpect(status().isForbidden());
-        mvc.perform(get("/api/v1/admin/review-reports").session(admin.session()))
+        mvc.perform(get("/api/v1/admin/review-reports").cookie(admin.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(reportId));
         mvc.perform(reporter.withCsrf(patch("/api/v1/admin/reviews/{id}/hide", reviewId)))
                 .andExpect(status().isForbidden());
@@ -139,7 +136,7 @@ class ReviewApiTests {
                 .andExpect(status().isNoContent());
         mvc.perform(get("/api/v1/places/{placeId}/reviews", placeId))
                 .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
-        mvc.perform(get("/api/v1/admin/review-reports").session(admin.session()))
+        mvc.perform(get("/api/v1/admin/review-reports").cookie(admin.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
     }
 
@@ -200,23 +197,10 @@ class ReviewApiTests {
         });
     }
 
-    private MemberSession login(String email) throws Exception {
-        var result = mvc.perform(get("/api/v1/auth/csrf")).andExpect(status().isOk()).andReturn();
-        var session = (MockHttpSession) result.getRequest().getSession(false);
-        String csrf = result.getResponse().getContentAsString();
-        var member = new MemberSession(session, JsonPath.read(csrf, "$.headerName"), JsonPath.read(csrf, "$.token"));
-        mvc.perform(member.withCsrf(post("/api/v1/auth/signup")).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"" + email + "\",\"password\":\"password123\",\"nickname\":\"후기 회원\"}"))
-                .andExpect(status().isCreated());
-        mvc.perform(member.withCsrf(post("/api/v1/auth/login")).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"" + email + "\",\"password\":\"password123\"}"))
-                .andExpect(status().isOk());
+    private AuthTestClient login(String email) throws Exception {
+        var member = AuthTestClient.create(mvc);
+        member.signup(email, "password123", "후기 회원");
+        member.login(email, "password123");
         return member;
-    }
-
-    private record MemberSession(MockHttpSession session, String header, String csrf) {
-        <T extends AbstractMockHttpServletRequestBuilder<T>> T withCsrf(T request) {
-            return request.session(session).header(header, csrf);
-        }
     }
 }

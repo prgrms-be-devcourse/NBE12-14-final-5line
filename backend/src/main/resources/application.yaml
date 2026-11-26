@@ -14,18 +14,14 @@ spring:
       max-file-size: 5MB
       max-request-size: 6MB
 
-server:
-  servlet:
-    session:
-      cookie:
-        http-only: true
-        same-site: lax
-
 logging:
   pattern:
     level: "%5p [requestId=%X{requestId:-}]"
 
 app:
+  auth:
+    jwt-secret: ${AUTH_JWT_SECRET_BASE64:}
+    cookie-secure: ${AUTH_COOKIE_SECURE:false}
   login-limit:
     max-failures: 5
     window-minutes: 15

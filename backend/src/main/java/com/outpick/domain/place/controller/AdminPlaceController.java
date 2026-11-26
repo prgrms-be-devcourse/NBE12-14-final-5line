@@ -1,6 +1,6 @@
 package com.outpick.domain.place.controller;
 
-import com.outpick.domain.member.security.MemberSessionPrincipal;
+import com.outpick.domain.member.security.MemberPrincipal;
 import com.outpick.domain.place.dto.AdminPlaceRequest;
 import com.outpick.domain.place.dto.AdminPlaceResponse;
 import com.outpick.domain.place.service.AdminPlaceService;
@@ -40,6 +40,6 @@ public class AdminPlaceController {
     }
 
     private long memberId(Authentication authentication) {
-        return ((MemberSessionPrincipal) authentication.getPrincipal()).memberId();
+        return ((MemberPrincipal) authentication.getPrincipal()).memberId();
     }
 }

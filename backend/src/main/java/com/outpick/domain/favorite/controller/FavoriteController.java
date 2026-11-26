@@ -6,7 +6,7 @@ import com.outpick.domain.favorite.dto.FavoriteNotificationRequest;
 import com.outpick.domain.favorite.dto.FavoriteNotificationResponse;
 import com.outpick.domain.favorite.dto.FavoritePlaceResponse;
 import com.outpick.domain.favorite.service.FavoriteService;
-import com.outpick.domain.member.security.MemberSessionPrincipal;
+import com.outpick.domain.member.security.MemberPrincipal;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -32,7 +32,7 @@ public class FavoriteController {
 
     @GetMapping
     public List<FavoritePlaceResponse> findMyFavorites(Authentication authentication) {
-        return favoriteService.findPlaces(((MemberSessionPrincipal) authentication.getPrincipal()).memberId());
+        return favoriteService.findPlaces(((MemberPrincipal) authentication.getPrincipal()).memberId());
     }
 
     @PatchMapping("/{placeId}/notification-settings")
@@ -41,7 +41,7 @@ public class FavoriteController {
             @PathVariable("placeId") @Positive(message = "장소 ID는 1 이상이어야 합니다.") long placeId,
             @Valid @RequestBody FavoriteNotificationRequest request) {
         favoriteService.changeNotificationSetting(
-                ((MemberSessionPrincipal) authentication.getPrincipal()).memberId(), placeId, request.isNotified());
+                ((MemberPrincipal) authentication.getPrincipal()).memberId(), placeId, request.isNotified());
         return new FavoriteNotificationResponse(placeId, request.isNotified());
     }
 
@@ -49,14 +49,14 @@ public class FavoriteController {
     @ResponseStatus(HttpStatus.CREATED)
     public FavoriteActionResponse save(Authentication authentication,
                                        @Valid @RequestBody FavoriteCreateRequest request) {
-        favoriteService.save(((MemberSessionPrincipal) authentication.getPrincipal()).memberId(), request.placeId());
+        favoriteService.save(((MemberPrincipal) authentication.getPrincipal()).memberId(), request.placeId());
         return new FavoriteActionResponse(request.placeId(), "관심 장소에 저장했습니다.");
     }
 
     @DeleteMapping("/{placeId}")
     public FavoriteActionResponse remove(Authentication authentication,
                        @PathVariable("placeId") @Positive(message = "장소 ID는 1 이상이어야 합니다.") long placeId) {
-        favoriteService.remove(((MemberSessionPrincipal) authentication.getPrincipal()).memberId(), placeId);
+        favoriteService.remove(((MemberPrincipal) authentication.getPrincipal()).memberId(), placeId);
         return new FavoriteActionResponse(placeId, "관심 장소에서 해제했습니다.");
     }
 }
