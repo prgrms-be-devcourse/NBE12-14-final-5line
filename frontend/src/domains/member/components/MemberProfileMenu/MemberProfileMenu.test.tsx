@@ -37,6 +37,7 @@ describe('탐색 화면의 프로필 메뉴', () => {
       ['마이페이지', '/mypage'],
       ['운영 현황', '/admin'],
       ['장소 관리', '/admin/places'],
+      ['운영 정보 검수', '/admin/operating-changes'],
       ['공지 관리', '/admin/notices'],
       ['오류 제보', '/admin/place-reports'],
       ['후기 신고', '/admin/review-reports'],

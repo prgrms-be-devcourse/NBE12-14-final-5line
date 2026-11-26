@@ -68,8 +68,9 @@ class TourOperatingCandidateStore {
             byte[] hash = hashValues(previous, TourOperatingChangeReport.normalize(change.newValue()));
             var existing = jdbc.query("""
                     SELECT candidate_id FROM place_operating_change_candidate
-                    WHERE place_id = ? AND field_name = ? AND pending_hash = ?
-                    """, (row, index) -> row.getLong("candidate_id"), candidate.placeId(), change.field(), hash);
+                    WHERE place_id = ? AND field_name = ?
+                      AND (pending_hash = ? OR (values_hash = ? AND decision = 'REJECTED'))
+                    """, (row, index) -> row.getLong("candidate_id"), candidate.placeId(), change.field(), hash, hash);
             if (!existing.isEmpty()) {
                 duplicate++;
                 continue;

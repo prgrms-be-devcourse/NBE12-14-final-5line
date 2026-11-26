@@ -97,6 +97,22 @@ class TourOperatingCandidateStoreTests {
                 placeId)).containsEntry("opening_period", "12월~2월").containsEntry("usage_fee", "60,000원");
     }
 
+    @Test
+    @DisplayName("같은 이전 값과 새 값으로 이미 반려된 후보는 재수집해도 다시 등록하지 않는다")
+    void doesNotReopenAnIdenticalRejectedCandidate() {
+        long placeId = publishedPlace("305");
+        var candidate = candidate(placeId, "305", "09:00", "10:00");
+        var store = new TourOperatingCandidateStore(jdbc, transactionManager);
+        assertThat(store.save(List.of(candidate)).saved()).isEqualTo(1);
+        jdbc.update("""
+                UPDATE place_operating_change_candidate SET decision = 'REJECTED', resolved_at = NOW()
+                WHERE place_id = ?
+                """, placeId);
+
+        assertThat(store.save(List.of(candidate))).isEqualTo(new TourOperatingCandidateStore.Summary(0, 1, 0));
+        assertThat(store.save(List.of(candidate(placeId, "305", "09:00", "11:00"))).saved()).isEqualTo(1);
+    }
+
     private long publishedPlace(String contentId) {
         long id = placeWriter.save(new TourApiNormalizer()
                 .normalize(TourApiTests.target(contentId), TourApiTests.place(contentId, "126.1", ""))).placeId();

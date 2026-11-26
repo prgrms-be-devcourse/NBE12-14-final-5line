@@ -1,9 +1,11 @@
 package com.outpick.domain.place.importer;
 
+import com.jayway.jsonpath.JsonPath;
 import com.outpick.domain.member.entity.Member;
 import com.outpick.domain.member.repository.MemberRepository;
 import com.outpick.domain.member.security.MemberSessionPrincipal;
 import com.outpick.domain.place.entity.PlacePublishStatus;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,10 +13,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextImpl;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -22,8 +26,10 @@ import org.testcontainers.mysql.MySQLContainer;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.web.context.HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -42,6 +48,7 @@ class AdminOperatingChangeApiTests {
     @Autowired TourImportWriter placeWriter;
     @Autowired TourOperatingInfoWriter operatingWriter;
     @Autowired JdbcTemplate jdbc;
+    @Autowired EntityManager em;
 
     @Test
     @DisplayName("비로그인 사용자와 일반 회원은 운영 정보 검수 후보를 조회할 수 없다")
@@ -82,6 +89,74 @@ class AdminOperatingChangeApiTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].placeId").value(first));
         mvc.perform(get(PATH).param("size", "51").session(session(admin))).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("운영자가 승인하면 장소 상세에 새 값이 보이고 같은 후보의 재처리는 거절한다")
+    void appliesApprovedValueOnceAndRecordsReviewer() throws Exception {
+        var admin = members.saveAndFlush(Member.createAdmin("approve@example.com", "운영자", "hash"));
+        long placeId = place("410", PlacePublishStatus.PUBLISHED);
+        addCandidate(placeId, "10:00", false);
+        long candidateId = candidateId(placeId);
+        var adminSession = session(admin);
+        String body = """
+                {"decision":"APPROVED","reason":"공식 홈페이지 확인"}
+                """;
+        mvc.perform(patch(PATH + "/{id}/resolution", candidateId).session(adminSession)
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        resolve(adminSession, candidateId, body).andExpect(status().isNoContent());
+        em.clear();
+        mvc.perform(get("/api/v1/places/{id}", placeId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.operatingInfo.operatingHours").value("10:00"));
+        mvc.perform(get(PATH).session(adminSession)).andExpect(jsonPath("$.totalElements").value(0));
+        assertThat(jdbc.queryForMap("""
+                SELECT decision, resolved_by, resolution_reason FROM place_operating_change_candidate WHERE candidate_id = ?
+                """, candidateId)).containsEntry("decision", "APPROVED")
+                .containsEntry("resolved_by", admin.getId()).containsEntry("resolution_reason", "공식 홈페이지 확인");
+        resolve(adminSession, candidateId, body).andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("일반 회원은 처리할 수 없고 오래된 후보는 승인 대신 사유를 남겨 반려할 수 있다")
+    void preventsStaleApprovalAndRequiresReasonForRejection() throws Exception {
+        var admin = members.saveAndFlush(Member.createAdmin("reject@example.com", "운영자", "hash"));
+        var member = members.saveAndFlush(new Member("reject-member@example.com", "회원", "hash"));
+        long placeId = place("411", PlacePublishStatus.PUBLISHED);
+        addCandidate(placeId, "10:00", false);
+        long candidateId = candidateId(placeId);
+        jdbc.update("UPDATE place_operating_info SET operating_hours = '11:00' WHERE place_id = ?", placeId);
+
+        String approval = """
+                {"decision":"APPROVED"}
+                """;
+        resolve(session(member), candidateId, approval).andExpect(status().isForbidden());
+        var adminSession = session(admin);
+        resolve(adminSession, candidateId, approval).andExpect(status().isConflict());
+        resolve(adminSession, candidateId, """
+                {"decision":"REJECTED","reason":" "}
+                """).andExpect(status().isBadRequest());
+        resolve(adminSession, candidateId, """
+                {"decision":"REJECTED","reason":"공식 안내와 불일치"}
+                """).andExpect(status().isNoContent());
+
+        assertThat(jdbc.queryForMap("""
+                SELECT decision, resolution_reason FROM place_operating_change_candidate WHERE candidate_id = ?
+                """, candidateId)).containsEntry("decision", "REJECTED").containsEntry("resolution_reason", "공식 안내와 불일치");
+        assertThat(jdbc.queryForObject("SELECT operating_hours FROM place_operating_info WHERE place_id = ?",
+                String.class, placeId)).isEqualTo("11:00");
+    }
+
+    private long candidateId(long placeId) {
+        return jdbc.queryForObject("SELECT candidate_id FROM place_operating_change_candidate WHERE place_id = ?",
+                Long.class, placeId);
+    }
+
+    private ResultActions resolve(MockHttpSession session, long candidateId, String input) throws Exception {
+        var response = mvc.perform(get("/api/v1/auth/csrf").session(session)).andExpect(status().isOk()).andReturn();
+        var csrf = JsonPath.parse(response.getResponse().getContentAsString());
+        return mvc.perform(patch(PATH + "/{id}/resolution", candidateId).session(session)
+                .header(csrf.<String>read("$.headerName"), csrf.<String>read("$.token"))
+                .contentType(MediaType.APPLICATION_JSON).content(input));
     }
 
     private long place(String contentId, PlacePublishStatus status) {

@@ -48,13 +48,17 @@ TOUR_OPERATING_REPORT_PATH=/tmp/outpick-operating-review.json TOUR_OPERATING_REP
 
 보고서에는 확인 대상 수, 실제 요청 수, 변경 후보와 오류 내역이 들어간다. 검수자는 `candidates`에서 장소와 변경 항목의 이전 값·새 값·출처를 확인한다. 공백과 줄바꿈만 다른 값은 같은 값으로 처리한다. 기존 값이 있는데 새 응답에서 항목이 빠지면 `MISSING_FIELDS`, 제공자가 정상 응답했지만 운영 항목이 비어 있으면 `NO_DATA`로 남긴다. 둘 다 삭제 후보로 올리지 않는다.
 
-HTTP 429가 발생하면 후속 요청을 멈추고 그때까지의 결과를 저장한다. 다음 범위를 확인할 때는 새 출력 파일 이름을 사용하고 `lastCompletedPlaceId`를 PowerShell의 `-AfterPlaceId` 또는 환경 변수 `TOUR_OPERATING_REPORT_AFTER_ID`에 넣는다. 요청 실패는 보고서를 기록한 뒤 종료 코드 1을 반환하므로, 일반 실패 항목도 `issues`에서 확인한다. 운영자 승인 화면과 알림 연동은 이 보고서의 후속 작업이다.
+HTTP 429가 발생하면 후속 요청을 멈추고 그때까지의 결과를 저장한다. 다음 범위를 확인할 때는 새 출력 파일 이름을 사용하고 `lastCompletedPlaceId`를 PowerShell의 `-AfterPlaceId` 또는 환경 변수 `TOUR_OPERATING_REPORT_AFTER_ID`에 넣는다. 요청 실패는 보고서를 기록한 뒤 종료 코드 1을 반환하므로, 일반 실패 항목도 `issues`에서 확인한다.
 
-검수 후보를 DB에 보관하려면 백엔드 시작으로 Flyway V20까지 적용한 뒤, 위 명령에 PowerShell `-SaveCandidates` 또는 macOS/Linux 환경 변수 `TOUR_OPERATING_REPORT_SAVE_CANDIDATES=true`를 추가한다. JSON은 먼저 기록하고 장소·항목별 후보를 `place_operating_change_candidate`에 저장한다.
+검수 후보를 DB에 보관하려면 백엔드 시작으로 Flyway V21까지 적용한 뒤, 위 명령에 PowerShell `-SaveCandidates` 또는 macOS/Linux 환경 변수 `TOUR_OPERATING_REPORT_SAVE_CANDIDATES=true`를 추가한다. JSON은 먼저 기록하고 장소·항목별 후보를 `place_operating_change_candidate`에 저장한다.
 
-아직 처리하지 않은 같은 이전 값·새 값 조합은 한 건으로 유지한다. 저장 직전에 공개 상태와 현재 값을 다시 확인해 비교 후 바뀐 후보는 건너뛴다. 실행 결과의 `saved`, `duplicate`, `stale`은 각각 저장·중복 제외·기준 변경으로 제외된 항목 수다. 웹 서버가 조회하는 운영 안내에는 후보를 적용하지 않는다.
+같은 장소·항목·이전 값·새 값 조합의 대기 후보나 반려 이력이 있으면 후보 저장을 건너뛴다. 저장 직전에 공개 상태와 현재 값을 다시 확인해 비교 후 바뀐 후보는 건너뛴다. 실행 결과의 `saved`, `duplicate`, `stale`은 각각 저장·중복 또는 동일 반려 이력·기준 변경으로 제외된 항목 수다.
 
 운영자 검수 화면은 `GET /api/v1/admin/place-operating-changes?page=0&size=20`으로 공개 장소의 미처리 후보를 조회할 수 있다. 운영자 세션이 필요하다. 탐지 시각이 같으면 후보 ID가 큰 쪽을 먼저 반환한다. 각 항목에는 후보 ID, 장소 ID·이름, 변경 필드, 이전 값·새 값, 각각의 출처 URL, 탐지 시각이 포함된다. 응답의 `totalElements`는 검수할 항목 수다. 한 장소에서 여러 필드가 바뀌면 각각 한 항목으로 센다.
+
+운영자 메뉴의 **운영 정보 검수**에서 이전 값·새 값과 출처를 보고 처리한다. `PATCH /api/v1/admin/place-operating-changes/{candidateId}/resolution`에 운영자 세션과 CSRF 헤더를 보내고, 본문에 `decision`(`APPROVED` 또는 `REJECTED`)과 `reason`(최대 500자, 반려 시 필수)을 넣는다. 성공 응답은 `204 No Content`다.
+
+승인은 공개 장소의 현재 값이 후보의 이전 값과 일치할 때 해당 항목만 갱신한다. 반려는 공개 값을 유지한다. 둘 다 결정·처리자·처리 시각·의견을 기록하며, 동일 후보를 다시 처리하려 하면 `409 Conflict`를 반환한다. 공개 값이 바뀐 후보도 승인 시 `409 Conflict`를 반환하며 사유를 남겨 반려할 수 있다.
 
 ## 상세 API와 화면
 
