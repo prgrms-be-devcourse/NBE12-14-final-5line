@@ -36,6 +36,6 @@ export type PlaceDetailData = PlaceSummary & {
   reviewedAt: string | null;
   representativeImage: string | null;
   activities: { placeActivityId: number; activityTypeId: number; activityTypeName: string; environmentType: string | null; seasons: string[] }[];
-  notices: { placeNoticeId: number; title: string | null; content: string | null; priority: string | null; validFrom: string | null; validUntil: string | null; sourceRecordId: number }[];
+  notices: { placeNoticeId: number; title: string | null; content: string | null; validFrom: string | null; validUntil: string | null; sourceRecordId: number }[];
   sources: { sourceRecordId: number; type: string | null; url: string | null; verifiedFields: string | null; originUpdatedAt: string | null; verifiedAt: string }[];
 };

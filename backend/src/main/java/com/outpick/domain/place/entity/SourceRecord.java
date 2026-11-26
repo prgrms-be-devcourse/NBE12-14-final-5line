@@ -23,6 +23,8 @@ import java.util.Objects;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class SourceRecord {
 
+    public static final String VERIFIED_FIELD_NOTICE = "notice";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "source_record_id")

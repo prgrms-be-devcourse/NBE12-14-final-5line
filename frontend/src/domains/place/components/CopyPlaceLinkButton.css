@@ -1,7 +1,0 @@
-.outpick-copyLink { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; max-width: 100%; }
-.outpick-copyLink .outpick-copyLinkButton { padding: 9px 12px; border: 1px solid #ddd9ff; border-radius: 8px; background: #fff; color: #5147ff; font-size: 12px; font-weight: 700; line-height: 1.4; cursor: pointer; white-space: nowrap; }
-.outpick-copyLinkButton:focus-visible, .outpick-copyLinkAddress:focus-visible { outline: 3px solid #5147ff; outline-offset: 3px; }
-.outpick-copyLinkButton:disabled { cursor: wait; opacity: .6; }
-.outpick-copyLinkFeedback { color: #6156cc; font-size: 11px; line-height: 1.6; }
-.outpick-copyLinkFeedback:empty { display: none; }
-.outpick-copyLinkAddress { width: 260px; max-width: 100%; min-width: 0; padding: 8px; border: 1px solid #dfe4ed; border-radius: 6px; background: #fafbfe; color: #16243b; font-size: 12px; }

@@ -30,4 +30,11 @@ describe('지도 URL 상태', () => {
     params.set('south', '40');
     expect(readPlaceMapBounds(params)).toBeNull();
   });
+
+  it('저장 정밀도에 맞는 지도 경계는 곱셈 오차가 있어도 그대로 저장한다', () => {
+    const bounds = { south: 37.37, west: 128.39, north: 37.38, east: 128.66 };
+    const params = writePlaceMapParams(new URLSearchParams(), { lat: 37.375, lng: 128.525, level: 8 }, bounds);
+
+    expect(readPlaceMapBounds(params)).toEqual(bounds);
+  });
 });

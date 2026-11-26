@@ -1,0 +1,20 @@
+.outpick-placeCard {
+  border-color: #e8edf3;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.outpick-placeCardSelected {
+  border-color: #5147ff;
+  box-shadow: 0 0 0 1px #5147ff, 0 6px 18px #23345724;
+}
+
+@media (hover: hover) {
+  .outpick-placeCard:not(.outpick-placeCardSelected):hover {
+    border-color: #aaa3ff;
+    box-shadow: 0 6px 18px #23345724;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .outpick-placeCard { transition: none; }
+}

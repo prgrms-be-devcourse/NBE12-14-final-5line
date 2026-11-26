@@ -42,18 +42,25 @@ public class TourImportWriter {
                 .url("https://www.data.go.kr/data/15101578/openapi.do").originUpdatedAt(candidate.originUpdatedAt())
                 .usageTermsMemo("한국관광공사 TourAPI 국문관광정보. 이미지 미수집. 응답 이미지 공공누리 유형: "
                         + candidate.imageCopyrightCode() + ". 시설 운영·종목·이용 조건은 검수 전.").build());
+        saveActivities(place, candidate.target());
+        persist(new TourApiImportRecord(contentId, place.getId(), source.getId(), LocalDateTime.now(placeClock).withNano(0)));
+        em.flush();
+        return new TourImportResult(contentId, TourImportResult.Status.CREATED, place.getId(), null);
+    }
+
+    /** 종목 후보가 있는 장소에 분류와 종목을 연결한다. 미분류 초안은 검수 단계에서 분류할 수 있다. */
+    private void saveActivities(Place place, TourImportTarget target) {
+        if (target.activityNames().isEmpty()) return;
+
         var category = em.createQuery("select c from ActivityCategory c where c.name = :name order by c.id", ActivityCategory.class)
-                .setParameter("name", candidate.target().categoryName()).setMaxResults(1).getResultList().stream().findFirst()
-                .orElseGet(() -> persist(ActivityCategory.builder().name(candidate.target().categoryName()).build()));
-        for (String activityName : candidate.target().activityNames()) {
+                .setParameter("name", target.categoryName()).setMaxResults(1).getResultList().stream().findFirst()
+                .orElseGet(() -> persist(ActivityCategory.builder().name(target.categoryName()).build()));
+        for (String activityName : target.activityNames()) {
             var type = em.createQuery("select t from ActivityType t where t.category = :category and t.name = :name order by t.id", ActivityType.class)
                     .setParameter("category", category).setParameter("name", activityName).setMaxResults(1).getResultList().stream().findFirst()
                     .orElseGet(() -> persist(ActivityType.builder().category(category).name(activityName).build()));
             persist(PlaceActivity.builder().place(place).activityType(type).build());
         }
-        persist(new TourApiImportRecord(contentId, place.getId(), source.getId(), LocalDateTime.now(placeClock).withNano(0)));
-        em.flush();
-        return new TourImportResult(contentId, TourImportResult.Status.CREATED, place.getId(), null);
     }
 
     private Region region(String code, String name, Region parent) {

@@ -1,522 +1,145 @@
-# OUTPICK Frontend
+# OUTPICK 프런트엔드 개발 가이드
 
-## 현재 장소 API 연결 상태
+OUTPICK은 스포츠·액티비티 장소를 지도와 목록에서 탐색하는 서비스다. 프런트엔드는 Next.js App Router, TypeScript, Tailwind CSS를 사용한다. 빌드한 정적 페이지를 제공하고, 브라우저에서 백엔드 API를 호출한다.
 
-목록·지도·상세는 Backend의 실제 장소 API를 사용한다. 실행 중인 화면에서는 `samplePlaces`를 읽지 않는다. Backend 실행 및 demo 데이터는 [연결 문서](../backend/docs/place-integration.md)를 참고한다. 아래 샘플 장소 설명은 초기 화면 개발 이력이며 현재 조회 방식은 이 절을 기준으로 한다.
+[로컬 실행](#로컬에서-실행하기) · [페이지와 레이아웃](#레이아웃과-페이지-추가) · [컴포넌트와 Tailwind CSS](#컴포넌트와-tailwind-css) · [API와 상태](#서버-상태-관리와-조회-화면) · [테스트](#테스트) · [빌드와 배포](#정적-빌드와-배포)
 
-Next.js + TypeScript + Tailwind CSS 기반으로 정적 파일을 빌드한다. HTTP 통신은 Axios, 서버 상태 관리는 TanStack Query를 사용한다. 공유 클라이언트 상태 관리는 Zustand를 사용할 예정이다.
+## 로컬에서 실행하기
 
-현재는 개발 환경·레이아웃 예시와 TanStack Query 기반 조회 화면을 구성했다. Zustand 설치·Store 구현은 공유할 UI 상태가 확정될 때까지 보류한다.
+Node.js 26.x를 사용한다. 프로젝트 기준은 Node.js 26.13.0과 npm 11.20.0이다. nvm을 쓰는 경우 `frontend/`에서 `nvm install`과 `nvm use`를 실행하면 `.nvmrc`에 지정된 버전을 사용할 수 있다. [Node 버전](.nvmrc) · [패키지 설정](package.json)
 
-## 샘플 장소 탐색 화면
+1. `frontend/.env.local`이 없으면 저장소 루트에서 `cp frontend/.env.example frontend/.env.local`을 실행한다. 파일이 이미 있으면 필요한 항목만 추가한다.
+2. 실제 장소 조회나 로그인이 필요하면 백엔드와 MySQL을 실행한다. 로컬 데이터 준비 방법은 장소 API 연동 문서를 따른다. [장소 API 연동](../backend/docs/place-integration.md)
+3. 저장소 루트에서 `make frontend-dev`를 실행하고 브라우저에서 <http://localhost:3000>을 연다. 명령은 필요할 때 `npm ci`를 실행한 뒤 개발 서버를 띄운다. `Ctrl+C`로 서버를 종료한다.
 
-`/`에서 가상 장소 데이터로 목록·검색·필터와 카카오 지도를 확인할 수 있다. 실제 장소 API는 아직 연결하지 않았다.
+| 변수 | 설정 |
+| --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | 로컬 기본값은 `http://localhost:8080`이다. API 함수가 `/api/v1/...` 경로를 붙인다. 배포용 Docker 이미지는 같은 서버로 요청하도록 `/`를 사용한다. |
+| `NEXT_PUBLIC_KAKAO_MAP_JS_KEY` | 카카오맵 Web SDK용 JavaScript 키를 넣는다. Kakao Developers에서 지도 사용을 켜고 `http://localhost:3000`, `http://127.0.0.1:3000`과 실제 배포 출처를 필요에 따라 등록한다. |
 
-검색 조건은 URL의 `query`(장소명), `category`(활동 분류), `region`, `season`, `environment`, `sort`에 저장한다. 현재 값은 샘플 화면용 이름이며 향후 실제 API의 ID·코드 계약과 연결할 때 변환한다. 기본 조건은 주소에서 생략한다.
+`NEXT_PUBLIC_` 값은 브라우저에 전달된다. 비밀번호나 토큰은 여기에 저장하지 않는다. 값을 변경한 뒤 개발 서버를 다시 시작한다. 배포용 정적 파일은 빌드 시점의 설정을 사용한다. [환경변수 예제](.env.example) · [카카오 지도 Web 가이드](https://apis.map.kakao.com/web/guide/)
 
-- 예시: `/?region=강원&season=겨울`
-- 검색어는 검색 버튼 또는 Enter로 제출할 때 적용하고, 나머지 필터·정렬은 선택 즉시 적용한다.
-- 주소 복사·직접 접속·새로고침·뒤로/앞으로 가기로 적용된 조건을 복원한다.
-- 초기화는 검색 조건과 미제출 입력을 지우며, 이 화면이 소유하지 않는 쿼리와 해시는 보존한다.
-- 지원하지 않는 필터 값은 기본값으로 해석하고, 다음 조건 변경 때 URL을 정리한다.
-- 카드 선택·모바일 보기 전환은 URL 저장 범위에 포함하지 않는다.
+## 레이아웃과 페이지 추가
 
-정적 내보내기를 유지하기 위해 `useSearchParams`를 사용하는 화면을 `Suspense`로 감싼다. URL 변경은 Next.js와 연동되는 [Native History API](https://nextjs.org/docs/app/getting-started/linking-and-navigating#native-history-api)를 사용하며, 조건 변경 시 화면 스크롤을 강제로 이동하지 않는다.
+`src/app/layout.tsx`는 전역 글꼴과 Query Provider를 연결한다. 그 아래에서 필요한 헤더와 사이드바에 따라 페이지의 위치를 정한다. 괄호로 감싼 Route Group 이름은 URL에서 생략된다.
 
-### 샘플 장소 상세와 목록 복귀
+| 페이지 | `src/app/` 아래 위치 | 사용하는 레이아웃 |
+| --- | --- | --- |
+| 장소 탐색 `/` | `(service)/page.tsx` | 공통 헤더와 검색창 |
+| 장소 상세 `/places/detail/` | `(service)/places/detail/page.tsx` | 공통 헤더와 상세 본문 |
+| 마이페이지 `/mypage/` | `(service)/(account)/mypage/` | 공통 헤더, 사이드바, 로그인 확인 |
+| 일반 회원 전용 페이지 | `(service)/(account)/mypage/(member)/` | 마이페이지 레이아웃과 일반 회원 권한 확인 |
+| 관리자 페이지 `/admin/` 및 하위 | `(service)/(account)/admin/` | 공통 헤더, 사이드바, 관리자 권한 확인 |
+| 로그인·회원가입·비밀번호 재설정 | `(minimal)/` | 인증 화면 |
 
-- 카드의 선택 버튼은 장소 요약을 표시하고, 별도의 상세 보기 링크는 `/places/detail/?id=1` 형태의 상세 화면으로 이동한다.
-- 상세 링크의 `returnTo`에 원래 목록 URL을 담아, 상세의 목록 복귀 링크에서도 검색 조건을 유지한다. 외부 주소나 목록 이외의 경로는 복귀 주소로 허용하지 않는다.
-- 같은 탭에서 상세로 이동하기 직전 목록 URL과 세로 스크롤 위치를 `sessionStorage`에 저장한다. 해당 목록으로 돌아오면 한 번 복원한다. 저장소 사용이 차단돼도 상세·목록 탐색은 유지한다.
-- 공유 링크로 상세에 직접 진입하면 해당 장소를 표시하고, `returnTo`가 없으면 전체 목록으로 이동할 수 있다.
-- 목록·상세의 가상 장소와 대체 일러스트는 `domains/place/`에서 공유한다. 상세 주소·공식 출처·확인일·운영 정보가 없는 샘플은 미확인으로 표시한다.
-- 없거나 잘못된 ID는 화면에서 찾을 수 없음으로 안내한다. 정적 상세 HTML을 사용하는 현재 구성은 HTTP 404 상태를 반환하는 API 구현과는 별개다.
+최상위 레이아웃에서 서비스 화면과 인증 화면을 최대 1440px로 가운데 정렬한다. 상세 본문은 최대 1160px, 계정 사이드바와 본문 영역은 최대 1280px를 사용한다. [최상위 레이아웃](src/app/layout.tsx)
 
-### 카카오맵 로컬 설정
+`(service)`의 공통 헤더는 스크롤할 때 화면 위에 남는다. 장소 탐색의 넓은 화면은 헤더와 검색 필터 아래의 공간을 목록과 지도로 나누고 왼쪽 목록만 스크롤한다. 좁은 화면에서는 하단 버튼으로 목록과 지도를 전환한다. 상세·마이페이지·관리자 페이지는 본문을 페이지 단위로 스크롤한다. [서비스 레이아웃](<src/app/(service)/layout.tsx>) · [헤더](<src/app/(service)/_components/ServiceHeader.tsx>) · [계정 레이아웃](<src/app/(service)/(account)/layout.tsx>)
 
-`frontend/.env.local`에 `NEXT_PUBLIC_KAKAO_MAP_JS_KEY`를 설정하고 개발 서버를 재시작한다. 기존 환경 파일을 예제로 덮어쓰지 않는다. 배포용 키 설정 변경은 정적 파일 재빌드가 필요하다.
+### 관리자 페이지 추가하기
 
-- Kakao Developers에서 카카오맵 사용 설정을 켜고 JavaScript 키의 SDK 도메인에 `http://localhost:3000`, `http://127.0.0.1:3000`을 등록한다. 배포 시 실제 서비스 도메인도 등록한다.
-- Web 지도 SDK에는 JavaScript 키를 사용한다. 브라우저에 전달되는 키이므로 도메인 제한을 적용하고, REST API·Admin 키를 넣지 않는다. 실제 값은 예제 파일과 소스에 기록하지 않는다.
-- SDK는 `autoload=false`로 한 번 로드하고 `kakao.maps.load` 완료 후 지도를 생성한다. 키 누락·스크립트 오류·12초 타임아웃은 목록을 유지하면서 지도에 안내하고 재시도를 제공한다.
-- 목록과 지도는 같은 필터 결과를 사용한다. 카드 선택은 해당 위치로 지도를 이동시키고, 지도 이름표 선택은 같은 카드와 요약을 선택한다.
-- 모바일 지도 전환과 영역 크기 변경 시 `relayout`을 적용한다. 축소 상태에서 가까운 이름표가 겹치면 확대해서 선택할 수 있다.
-- 현재 좌표는 **지도 연동 검증용 임의 좌표**이며 실제 시설 위치가 아니다. 화면에도 샘플 표기를 제공한다. 지도 이동 영역으로 재검색하는 기능과 실제 장소 API 연동은 후속 작업이다.
+1. `(service)/(account)/admin/` 아래에 폴더를 만들고 `page.tsx`에 본문을 연결한다. 공통 헤더, 사이드바, 관리자 접근 확인은 상위 레이아웃에서 적용한다. [후기 신고 페이지](<src/app/(service)/(account)/admin/review-reports/page.tsx>) · [관리자 레이아웃](<src/app/(service)/(account)/admin/layout.tsx>)
+2. 메뉴에서 열 수 있어야 하면 `adminNavigationItems`에 `label`, `href`, Lucide 아이콘을 등록한다. 관리자 계정 메뉴와 사이드바가 이 목록을 공유한다. 일반 회원 전용 메뉴는 `memberNavigationItems`에서 관리한다. [역할별 메뉴 목록](src/domains/member/navigation/accountNavigationItems.ts)
+3. 운영자로 로그인해 메뉴 링크, 선택된 메뉴 표시, 직접 접속, 새로고침을 확인한다. 로그아웃한 상태에서는 로그인으로, 권한이 다른 계정은 마이페이지로 이동하는지 확인한다. API의 관리자 권한 검사는 백엔드에서 적용한다. [보호 페이지](src/domains/member/components/ProtectedPage.tsx)
 
-참고: [Kakao 지도 Web 가이드](https://apis.map.kakao.com/web/guide/), [SDK 문서](https://apis.map.kakao.com/web/documentation/).
+### 정적 내보내기를 고려한 페이지 작성
 
-## 개발 환경
+`useSearchParams()`를 쓰는 클라이언트 컴포넌트는 해당 페이지에서 `Suspense`로 감싼다. 장소 상세는 정적 경로 `/places/detail/`를 제공하고 브라우저에서 `id`를 읽어 장소를 조회한다. [장소 상세의 Suspense 경계](<src/app/(service)/places/detail/page.tsx>)
 
-- Node.js: 26.13.0 기준, 26.x 사용
-- npm: 11.20.0 기준
-- Next.js App Router, TypeScript strict 모드
-- Tailwind CSS, ESLint
-- 소스 디렉터리: `src/`, import 별칭: `@/*`
+## 컴포넌트와 Tailwind CSS
 
-Node.js 설치 방식은 자유롭게 선택한다. [공식 설치 프로그램](https://nodejs.org/en/download)으로 설치한 경우 `node --version`으로 버전을 확인한다. 기존 설치를 반드시 삭제할 필요는 없다.
+### 코드를 둘 위치 정하기
 
-nvm 사용자는 `frontend/`에서 다음 명령을 실행한다. `.nvmrc`에 기록한 버전을 설치하고 현재 터미널에서 선택한다.
+| 코드 | 위치 | 예시 |
+| --- | --- | --- |
+| 라우트와 공통 레이아웃 | `src/app/` | [서비스 레이아웃](<src/app/(service)/layout.tsx>) |
+| 한 페이지에서만 쓰는 컴포넌트 | 해당 라우트의 `_components/` | [PlaceDetail](<src/app/(service)/places/detail/_components/PlaceDetail/>) |
+| 여러 화면에서 쓰는 도메인 UI | `src/domains/<도메인>/components/` | [MemberProfileMenu](src/domains/member/components/MemberProfileMenu/) |
+| 도메인에 의존하지 않는 공통 코드 | `src/shared/` | [공통 HTTP 클라이언트](src/shared/lib/http/) |
 
-```bash
-nvm install
-nvm use
+참조 방향은 `app → domains → shared`와 `app → shared`를 따른다. 별칭 `@/`는 `src/`를 가리킨다. `_components/`, `_hooks/`, `_providers/`는 URL을 만들지 않는 내부 폴더다.
+
+컴포넌트에 테스트, 메뉴 데이터 또는 전용 스타일이 있으면 컴포넌트와 이름이 같은 폴더에 함께 둔다. 구현 파일 하나면 `components/` 또는 `_components/` 바로 아래에 둘 수 있다. 메뉴 데이터는 `profileMenuItems.ts`처럼 렌더링 코드와 같은 폴더의 별도 파일에 둔다. [프로필 메뉴 구성](src/domains/member/components/MemberProfileMenu/)
+
+### 스타일 작성하기
+
+새 UI의 배치, 간격, 글자, 색상, 반응형 동작은 TSX의 `className`에서 **Tailwind 유틸리티를 우선 사용한다**. `md:`는 넓은 화면에 적용할 스타일, `focus-visible:`은 키보드 등으로 이동했을 때 보일 포커스 스타일에 사용한다. 조건별 스타일이 필요하면 완성된 클래스 문자열을 선택한다. 예를 들어 `active ? 'bg-indigo-600 text-white' : 'bg-white text-slate-900'`처럼 작성하면 Tailwind가 두 클래스 목록을 모두 찾을 수 있다. [헤더 검색 폼](<src/app/(service)/_components/PlaceSearchForm.tsx>) · [계정 사이드바](<src/app/(service)/(account)/_components/AccountSidebar/AccountSidebar.tsx>)
+
+```tsx
+<button
+  type="submit"
+  disabled={isPending}
+  className="w-full rounded-lg bg-[#5147ff] px-4 py-2 font-bold text-white
+    focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5147ff]
+    disabled:cursor-wait disabled:opacity-60 md:w-auto"
+>
+  저장
+</button>
 ```
 
-`.nvmrc`와 `package.json`의 `engines`는 프로젝트 기준을 기록한다. 파일만으로 Node.js가 설치되거나 전환되지는 않는다. 기본 npm 설정에서 `engines` 불일치는 경고이므로 실행 전 버전을 확인한다.
+일반 CSS는 전역 글꼴, 대체 그림, 인증 화면 애니메이션처럼 여러 규칙을 함께 읽는 편이 명확할 때 사용한다. 카카오 SDK가 삽입하는 마커나 카드의 선택·호버 조합은 컴포넌트 가까이의 CSS에서 관리한다. 스타일을 옮길 때는 좁은 화면, 키보드 포커스, 선택과 비활성 상태를 확인한다. [전역 스타일](src/app/globals.css) · [대체 그림](src/domains/place/components/PlaceArtwork/PlaceArtwork.css) · [인증 화면 애니메이션](src/domains/member/components/account.css) · [카카오 마커](src/domains/place/components/KakaoPlaceMap/KakaoPlaceMap.css) · [카드 선택 스타일](<src/app/(service)/_components/PlaceExplorer/PlaceExplorer.css>)
 
-## 설치 및 로컬 실행
+### 이름과 코드 스타일
 
-저장소 루트에서 다음 명령을 실행한다.
-
-Node.js와 npm은 먼저 설치하고 프로젝트 기준 버전을 선택한다.
-
-```bash
-cp frontend/.env.example frontend/.env.local
-make frontend-dev
-```
-
-- `make frontend-dev`: 필요한 경우 `npm ci`로 패키지를 설치한 뒤 개발 서버를 시작한다. 브라우저에서 <http://localhost:3000>에 접속한다. 로그는 현재 터미널에 표시되고 `Ctrl+C`로 종료한다.
-- `node_modules/`에 성공한 설치 기록이 없거나 `package.json`·`package-lock.json`·Node.js/npm 버전이 바뀌면 다시 설치한다. 기존에 직접 설치했더라도 첫 실행에는 한 번 설치한다.
-- 설치에 실패하면 개발 서버를 실행하지 않는다. 설치 기록을 삭제하면 다음 실행에서 다시 설치한다.
-- Node.js 버전을 자동으로 설치하거나 변경하지 않는다.
-
-기본 페이지는 Backend나 MySQL을 실행하지 않아도 확인할 수 있다. `node_modules/`, `.next/`, `out/`은 Git에 포함하지 않는다.
-
-### 환경변수
-
-`frontend/.env.local`은 Next.js가 읽는 로컬 설정이며 Git에서 제외한다. 루트의 `.env`는 Docker Compose·Backend용이므로 Frontend 설정과 분리한다. 예제 복사는 최초 한 번만 하고, 기존 `.env.local`이 있다면 필요한 항목만 직접 추가한다.
-
-| 변수 | 로컬 예제 값 | 용도 |
-|---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | Backend API 서버의 기본 주소. 도메인 API 함수가 `/api` 등의 요청 경로를 추가 |
-
-공통 Axios 인스턴스가 이 값을 읽는다. 로컬 개발에서는 `http://localhost:8080`, 배포용 Docker 이미지에서는 `/`를 사용한다. `/`는 브라우저가 현재 화면의 프로토콜·호스트·포트를 사용해 API를 요청한다는 뜻이다. 값이 없거나 `/` 또는 유효한 HTTP(S) 주소가 아니면 초기화 시 실패한다.
-
-Makefile의 Frontend Docker 빌드는 Node.js 26으로 `frontend/.env`에서 `NEXT_PUBLIC_KAKAO_MAP_JS_KEY`만 읽어 전달한다. `.env.local`은 읽지 않으며 API 주소는 `/`로 고정한다. 파일이 없거나 지도 키가 비어 있으면 빌드를 중단한다. 파일 자체는 Git과 이미지에 포함하지 않으며, 전달한 JavaScript 키는 브라우저 코드에 공개된다. 자세한 명령과 Kakao 도메인 등록은 [배포 안내](docs/deployment.md)를 따른다.
-
-`NEXT_PUBLIC_` 변수는 브라우저에 공개되므로 비밀번호·토큰을 넣지 않는다. 정적 배포에서는 빌드 시 값이 고정되므로 배포 환경의 API 주소를 설정한 뒤 빌드한다. 값 변경 후 개발 서버는 다시 시작하고, 배포 파일은 다시 빌드한다. 터미널에서 이미 설정한 동일한 이름의 환경변수는 `.env.local`보다 우선한다.
-
-## 코드 검사 및 정적 빌드
-
-저장소 루트에서 실행한다. 이 명령들은 자동 설치를 하지 않으므로 최초에는 `make frontend-dev`로 설치를 마친 뒤 서버를 종료한다.
-
-```bash
-make frontend-lint
-make frontend-typecheck
-make frontend-build
-```
-
-- `frontend-lint`: ESLint로 코드를 검사한다.
-- `frontend-typecheck`: Next.js의 라우트 타입을 생성한 뒤 TypeScript 타입을 검사한다.
-- `frontend-build`: `output: "export"` 설정으로 배포용 HTML·CSS·JavaScript를 `frontend/out/`에 생성한다.
-
-직접 npm을 사용하려면 `frontend/`에서 `npm ci`, `npm run dev`, `npm run lint`, `npm run typecheck`, `npm run build`를 실행할 수 있다. 새 라이브러리를 추가하는 담당자는 `npm install 패키지명`을 실행하고 `package.json`과 `package-lock.json`을 함께 공유한다.
-
-`out/`은 정적 파일 서버나 CDN으로 제공한다. Next.js 실행 서버를 사용하는 `next start`는 이 구성에 사용하지 않는다.
-
-Python 3가 설치되어 있다면 프로젝트 루트에서 기존 빌드 결과를 다음과 같이 제공한다. 이 명령은 로컬 확인용이며 실제 배포 설정은 아니다.
-
-```bash
-make frontend-preview
-```
-
-`frontend-preview`는 자동 설치나 재빌드를 하지 않는다. `frontend/out/index.html`이 없으면 `make frontend-build`를 먼저 실행하라는 안내와 함께 종료한다. 소스나 API 주소를 변경했다면 다시 빌드한 뒤 확인한다.
-
-먼저 기존 개발 서버를 종료해 3000번 포트를 비운다. 브라우저에서 <http://localhost:3000>에 접속하고 확인 후 `Ctrl+C`로 정적 서버를 종료한다. 이 주소는 Backend local CORS 허용 출처와 같다. 다른 프로그램이 포트를 사용하면 임의로 종료하지 말고 사용 상태를 확인한다.
-
-### 정적 호스팅 경로와 검증
-
-`output: 'export'`와 `trailingSlash: true`를 사용한다. URL 끝에 `/`를 붙이고 경로별 디렉터리 안에 `index.html`을 생성한다.
-
-| URL | 생성 파일 |
-|---|---|
-| `/` | `out/index.html` |
-| `/minimal-example/` | `out/minimal-example/index.html` |
-| `/main-example/` | `out/main-example/index.html` |
-| `/admin-example/` | `out/admin-example/index.html` |
-
-정적 호스트는 디렉터리의 `index.html`을 제공해야 한다. CDN에서 같은 동작을 지원하는지 추후 인프라 작업에서 확인한다. 모든 경로를 루트 HTML로 돌리는 방식 대신 경로에 해당하는 HTML을 제공한다. 클라이언트 이동에 사용하는 `.txt` 파일과 `_next/` 자원도 필요하므로 `out/` 전체를 배포 대상으로 삼는다.
-
-API 주소는 빌드 시 브라우저 코드에 포함된다. 배포 대상 API 주소를 설정한 뒤 빌드하며, 이미 빌드한 파일의 API 주소를 바꾸려면 다시 빌드한다. `/`로 빌드하면 EC2 IP나 접속 도메인이 바뀌어도 같은 이미지를 사용할 수 있다. 비밀정보는 `NEXT_PUBLIC_` 환경변수에 넣지 않는다.
-
-이번 로컬 검증에서 프로덕션 빌드, 네 페이지의 HTML 직접·반복 요청, JS·CSS 자원 11개의 HTTP 200, 빌드 코드의 로컬 API 주소 포함을 확인했다. 실제 Backend의 ID 1 성공·ID 2 업무 오류와 CORS 헤더도 확인했다. Next.js 서버는 사용하지 않았고 검증용 정적 서버는 종료했다.
-
-사용자가 로컬 정적 서버에서 다음 브라우저 동작도 정상임을 확인했다.
-
-- `/`의 링크로 세 예시 화면을 이동하고 뒤로 가기
-- 각 예시 URL로 직접 접속하고 새로고침
-- `/main-example/`에서 ID 1 성공·ID 2 오류 표시와 ‘다시 조회’
-
-AWS·CDN·Terraform 구축과 실제 배포는 이번 검증 범위에 포함하지 않는다.
-
-### 초기 구성 검증 결과
-
-- Node.js 26.13.0, npm 11.20.0에서 ESLint·타입 검사·정적 빌드를 통과했다.
-- 개발 서버와 정적 파일 서버에서 기본 HTML·CSS·JavaScript의 HTTP 200 응답과 Tailwind 클래스 생성을 확인했다.
-- 초기에는 브라우저 도구를 사용할 수 없었으며, 이후 사용자가 개발 서버와 정적 빌드 화면의 동작을 직접 확인했다. 반응형 세부 디자인 검수는 별도다.
-- `npm audit`에서 린트 도구의 간접 의존성인 minimatch 관련 중간 등급 경고 7건이 확인됐다. 호환 범위 내 `npm audit fix`로는 해결되지 않았으며, 강제 버전 변경은 적용하지 않았다.
-
-## Docker 배포
-
-Frontend 파일을 포함한 Nginx 이미지를 만들어 기존 배포용 Compose에서 실행한다. 이미지 빌드·Docker Hub 업로드·EC2 파일 전달·브라우저 확인은 [Frontend 배포 안내](docs/deployment.md)를 따른다. 로컬 개발은 기존 Frontend 개발 서버와 IntelliJ Backend를 각각 실행하는 방법을 유지한다.
-
-## 테스트
-
-Vitest 5.1.0과 MSW 3.0.5를 개발 의존성으로 사용한다. API·로직 테스트는 Node 환경, 컴포넌트 테스트는 jsdom 환경에서 실행한다. Backend·MySQL·개발 서버를 실행하지 않아도 테스트할 수 있다.
-
-저장소 루트에서 전체 테스트를 한 번 실행한다.
-
-```bash
-make frontend-test
-```
-
-`frontend/`에서 직접 실행할 수도 있다.
-
-```bash
-npm run test
-npm run test:watch
-```
-
-`test:watch`는 파일 변경 시 다시 실행하며 `Ctrl+C`로 종료한다. 의존성이 설치되어 있어야 하며 테스트 명령 자체는 자동 설치하지 않는다.
-
-```text
-frontend/
-├── vitest.config.mts       # Node 환경·setup 파일·@ 별칭 설정
-└── tests/
-    ├── setup.ts            # 파일 실행 전 MSW 시작, 테스트 후 응답 초기화, 파일 종료 후 해제
-    ├── mocks/
-    │   └── server.ts       # 테스트용 요청 가로채기 도구
-    └── msw.test.ts         # 성공·실패 응답 재현을 확인하는 최소 예시
-```
-
-MSW는 실제 포트를 여는 서버가 아니라 테스트 프로세스의 요청을 가로챈다. 각 테스트에서 `server.use()`로 필요한 응답을 등록한다. `afterEach`에서 응답을 초기화하므로 다른 테스트로 설정이 이어지지 않는다. 등록하지 않은 요청은 `onUnhandledFrame: 'error'`로 실패시켜 실제 네트워크 요청을 방지한다.
-
-공통 설정은 `tests/`에 두고, 실제 기능 테스트는 `src/`의 해당 코드 가까이에 `exampleApi.test.ts`처럼 추가한다. 테스트 함수와 검증 함수는 `vitest`에서 명시적으로 import하며, `it`에는 입력 상황과 검증 결과를 한국어로 작성한다.
-
-현재 두 테스트는 기본 `fetch`로 성공 응답의 상태·JSON, 실패 응답의 404 상태·`application/problem+json` Content-Type·본문을 읽는 것을 확인한다. 테스트 URL과 데이터는 도구 연결 확인용이며 실제 Backend 계약 검증이 아니다. 이 연결 테스트의 `fetch`는 의도적으로 유지한다. 실제 API 함수는 공통 Axios 인스턴스를 사용하며 별도 테스트에서 오류 변환을 확인한다. 브라우저의 응답 처리는 이 Node 테스트로 검증하지 않는다.
-
-Axios 공통 코드와 example API 테스트는 각 구현 파일 가까이에 작성했다. React Testing Library·user-event·jsdom으로 컴포넌트 동작도 검증한다. 실제 브라우저 흐름용 Playwright는 추후 도입한다.
-
-참고: [Vitest 설정](https://vitest.dev/config/), [MSW Node 통합](https://mswjs.io/guides/integrations/node).
-
-## HTTP 통신과 example API
-
-Axios 1.21.1의 공통 인스턴스는 `NEXT_PUBLIC_API_BASE_URL`, 쿠키 전송 허용(`withCredentials: true`), 기본 타임아웃 10초를 사용한다. HTTP 성공 응답은 그대로 유지하며 도메인 API 함수가 `response.data`인 DTO를 반환한다.
-
-```text
-src/
-├── shared/
-│   └── lib/http/
-│       ├── apiClient.ts
-│       ├── apiClient.test.ts
-│       ├── apiError.ts
-│       └── apiError.type.ts
-└── domains/example/
-    ├── api/
-    │   ├── exampleApi.ts
-    │   └── exampleApi.test.ts
-    └── types/
-        └── example.type.ts
-```
-
-- `getExample({ id, signal })`: `GET /api/v1/examples/{id}`로 조회한다. Backend 예시는 ID 1에서 성공하고 다른 양수 ID에서 업무 오류를 반환한다. 선택적인 `signal`로 요청을 취소할 수 있다.
-- `previewExample({ name, participantCount })`: `POST /api/v1/examples/preview`로 미리보기를 요청한다. 저장하지 않으며 이름·인원수의 Backend Validation을 적용한다.
-- 두 함수는 `{ name, participantCount }`를 반환하고 `data` 래퍼를 추가하지 않는다. TypeScript DTO 타입은 Backend 계약을 표현하며 성공 JSON의 런타임 검증 기능은 아니다.
-
-Backend의 공통 접두사에 맞춰 도메인 API 함수는 `/api/v1/...` 경로를 사용한다. `NEXT_PUBLIC_API_BASE_URL`에는 로컬 개발용 `http://localhost:8080` 또는 배포용 `/`를 설정하고 `/api/v1`을 중복으로 넣지 않는다.
-
-### 공통 오류 사용
-
-Axios 실패는 `ApiError`로 변환한다. `error.message`로 설명을 읽고 `error.details.kind`로 종류를 구분한다. HTTP 응답을 받았다면 `details.status`, `code`, `requestId`, `fieldErrors`를 사용할 수 있다. `code`와 `requestId`는 유효한 문자열을 받은 경우에 제공하고, 필드 오류가 없으면 빈 배열을 사용한다.
-
-```ts
-import { getExample } from '@/domains/example/api/exampleApi';
-import { ApiError } from '@/shared/lib/http/apiError';
-
-try {
-  const example = await getExample({ id: 1 });
-  // example을 호출한 화면이나 조회 Hook에서 사용한다.
-} catch (error: unknown) {
-  if (error instanceof ApiError && error.details.kind === 'http') {
-    // error.details.status, code, requestId, fieldErrors로 화면별 처리를 결정한다.
-  }
-}
-```
-
-위 코드는 오류 정보 접근을 보여 주는 부분 예시다. 실제 화면에서는 성공 데이터를 사용하고, 각 실패 종류와 예상하지 못한 예외를 처리한다.
-
-| `details.kind` | 의미 |
-|---|---|
-| `http` | HTTP 응답을 받은 실패. `application/problem+json`의 설명·코드·요청 ID·필드 오류를 확인해 유지 |
-| `network` | 응답 없는 연결 실패. 브라우저의 CORS 차단과 연결 실패를 정확히 구분하지 않음 |
-| `timeout` | 제한 시간 초과 |
-| `canceled` | AbortSignal 등으로 요청 취소 |
-
-ProblemDetail이 아닌 JSON·HTML 응답이나 형식이 다른 필드는 안전한 공통 안내로 처리한다. 상태 코드는 본문의 `status` 대신 실제 HTTP 응답을 기준으로 삼는다. Axios와 무관한 예외는 원래 오류를 유지한다. 자동 재시도·토큰 갱신·로그인 이동·전역 알림은 구현하지 않았다.
-
-쿠키 전송 허용만으로 인증 연결이 완성되지는 않는다. 실제 브라우저 연동에는 Backend의 CORS와 쿠키 SameSite·Secure 등 인증 정책 합의가 필요하다. 이번 작업에서는 Backend 설정을 변경하지 않았다.
-
-### 테스트 범위
-
-`vitest.config.mts`는 테스트 전용 API 주소를 지정하므로 개인 `.env.local`이나 실제 Backend에 의존하지 않는다. MSW로 example 조회·미리보기 성공, 업무·Validation 오류, 비표준 응답, 네트워크 실패·타임아웃·취소를 재현한다. 실제 Backend·브라우저·쿠키 전송·CORS 연결 검증은 포함하지 않는다. 화면과 TanStack Query 연결은 아래 서버 상태 관리 절에서 설명한다.
-
-참고: [Axios 오류 처리](https://axios-http.com/docs/handling_errors), [Axios 요청 설정](https://axios-http.com/docs/req_config).
+- 작은 Props 타입은 컴포넌트 파일에 둔다. 도메인에서 공유하는 요청·응답 타입은 `types/*.type.ts`에 둔다. 타입 전용 import는 `import type`을 사용한다. [장소 API 타입](src/domains/place/types/placeApi.type.ts)
+- 일반 문자열에는 홑따옴표, JSX 속성에는 쌍따옴표를 사용하고 공백 2칸으로 들여쓴다.
+- 여러 줄 객체·배열·import/export·enum·튜플에는 마지막 쉼표를 붙인다. 함수 선언·호출의 마지막 인자에는 쉼표를 붙이지 않는다. 항목이 3개 이상이면 항목별 줄바꿈을 권장한다.
+- 소스에서 사용할 아이콘은 설치된 `lucide-react`에서 가져온다. 아이콘만 표시하는 버튼이나 링크에는 목적을 설명하는 접근 가능한 이름을 붙인다. [프로필 메뉴](src/domains/member/components/MemberProfileMenu/MemberProfileMenu.tsx)
 
 ## 서버 상태 관리와 조회 화면
 
-TanStack Query 5.107.1로 서버 응답·로딩·오류·캐시를 관리한다. 최상위 레이아웃에서 `QueryProvider`를 연결한다. 브라우저에서는 같은 Query Client를 재사용하고 서버 렌더링에서는 새로 생성해 요청 간 캐시 공유를 피한다. API 조회는 브라우저에서 실행하며 빌드 시 미리 조회하지 않는다.
+| 상태 | 관리 위치 | 예시 |
+| --- | --- | --- |
+| 서버에서 받은 데이터 | TanStack Query | 현재 회원, 장소 목록·상세, 운영 현황 |
+| 공유하거나 뒤로 가기로 복원할 조건 | URL | 장소명, 지역·종목 필터, 지도 검색 영역 |
+| 컴포넌트에서만 쓰는 값 | React 상태 | 제출 전 검색어, 프로필 메뉴 열림 여부 |
+| 같은 탭의 상세 복귀 정보 | `sessionStorage` | 선택한 장소, 표시한 카드 수, 스크롤 위치 |
 
-```text
-src/
-├── app/
-│   ├── _providers/QueryProvider.tsx
-│   └── (main)/main-example/_components/
-│       ├── MainExampleContent.tsx
-│       └── MainExampleContent.test.tsx
-├── domains/example/
-│   ├── queries/exampleQueryKeys.ts
-│   └── hooks/useExampleQuery.ts
-└── shared/lib/query/queryClient.ts
-```
-
-조회 흐름은 `MainExampleContent → useExampleQuery → getExample → apiClient`다. Query Key는 `['examples', 'detail', id]`로 ID별 캐시를 구분하며, 취소 신호는 Axios까지 전달한다.
-
-| 공통 정책 | 값 |
-|---|---|
-| `staleTime` | 30초 동안 데이터를 최신으로 취급 |
-| `gcTime` | 사용하지 않는 캐시를 5분 뒤 제거 |
-| `retry` | `false`. 실패 자동 재시도 안 함 |
-| `refetchOnWindowFocus` | `false`. 창 포커스 복귀 시 자동 재조회 안 함 |
-| `refetchOnReconnect` | `true`. 재연결 시 오래된 활성 조회 재조회 |
-
-개별 Hook에서 정책을 재정의할 수 있다. 최신 캐시가 있어도 사용자가 누르는 ‘다시 조회’는 재요청한다. Mutation·데이터 변경 후 캐시 무효화 예시는 이번 범위에 포함하지 않는다.
-
-### 로컬 화면 확인
-
-Backend와 MySQL을 준비하고 API 주소를 확인한 뒤 Frontend를 실행한다. `/main-example`에서 ID 1은 성공 응답, ID 2는 업무 오류를 조회한다. 로딩·성공·오류 표시와 ‘다시 조회’를 확인한다. 재조회에 실패해도 기존 데이터가 있다면 안내와 함께 유지한다.
-
-이 화면은 실제 Backend를 호출한다. 테스트의 MSW는 개발 화면에 적용하지 않는다. 출처가 다른 서버를 브라우저에서 호출하려면 Backend의 CORS·쿠키 정책이 필요하다. Backend의 `local` 프로필은 `http://localhost:3000`을 허용한다. 다른 포트나 호스트를 사용한다면 Backend 허용 출처에도 명시해야 한다.
-
-### API 연동 검증 결과
-
-Frontend 테스트 17개·린트·타입 검사를 통과했다. 실행 중인 Backend의 ID 1 성공 응답과 ID 2의 404 업무 오류, 두 응답의 `http://localhost:3000` CORS·자격 증명 허용 헤더를 확인했다. 이후 사용자가 실제 브라우저에서 ID 1 성공·ID 2 오류 응답을 확인했고, Backend·Frontend 전체 테스트도 통과했다. 인증 쿠키 전송 검증은 별도다.
-
-### 컴포넌트 테스트
-
-React Testing Library 16.3.3·user-event 14.6.9·jsdom 31.0.0을 사용한다. 컴포넌트 테스트 첫 줄에 `// @vitest-environment jsdom`을 선언하고 `tests/setup-dom.ts`를 import한다. 기존 API 테스트는 Node 환경을 유지한다.
-
-실제 QueryProvider로 화면을 감싸고 MSW로 응답을 재현한다. `setup-dom.ts`는 테스트마다 화면을 해제하고 Query 캐시·타이머를 정리한다. jsdom 주소는 모의 API와 같은 `https://api.outpick.test`로 지정했다. 실제 브라우저의 CORS·쿠키 정책은 검증하지 않는다.
-
-화면 테스트는 로딩 후 성공 표시, 오류 후 수동 재조회, 성공 데이터 갱신, ID별 캐시 구분과 최신 캐시 재사용을 검증한다. 버튼 클릭과 선택 입력은 user-event로 재현한다. 실제 브라우저 렌더링·뒤로 가기·네트워크 재연결 검증은 포함하지 않는다.
-
-참고: [TanStack Query Provider 구성](https://tanstack.com/query/latest/docs/framework/react/guides/advanced-ssr), [React Testing Library API](https://testing-library.com/docs/react-testing-library/api/).
-
-## 코드 스타일 규칙
-
-Next.js 권장 ESLint 설정에 `@stylistic/eslint-plugin` 5.10.0의 스타일 규칙을 추가한다.
-
-| 항목 | 규칙 |
-|---|---|
-| 일반 문자열 | 홑따옴표 사용. 문자열 안의 홑따옴표를 이스케이프해야 하는 경우 쌍따옴표 허용 |
-| JSX 태그 속성 | 쌍따옴표 사용 |
-| 들여쓰기 | 공백 2칸 |
-| 여러 줄 객체·배열·import/export | 마지막 항목에 쉼표 사용 |
-| 여러 줄 enum·튜플 | 마지막 항목에 쉼표 사용 |
-| 함수 선언·호출 | 마지막 인자에 쉼표 사용하지 않음 |
-
-JSON은 문법에 따라 쌍따옴표를 사용한다. 구조분해의 마지막 rest 요소처럼 문법상 쉼표를 허용하지 않는 경우는 제외한다.
-
-`frontend/`에서 검사하거나 자동 수정한다.
-
-```bash
-npm run lint
-npm run lint:fix
-```
-
-함수 인자·객체·배열·구조분해는 항목이 3개 이상이면 항목별 줄바꿈을 작성 규칙으로 권장한다.
-
-1~2개는 한 줄과 여러 줄 모두 허용한다.
-
-설치된 안정 패키지에서도 `list-style` 규칙 자체는 실험 기능으로 표시되어 있어 자동 강제는 보류한다. 
-
-향후 CI에 적용할 검사의 안정성을 고려한 결정이며, 규칙이 안정화되면 다시 검토한다.
-
-## 라우팅 및 디렉터리 구조
-
-다음은 구현한 라우팅·레이아웃 구조와 후속 기능의 배치 예시다. `/` 진입 화면, 세 Route Group의 레이아웃·예시 페이지·전용 컴포넌트, `shared/components/layout/`은 구현했다. `_providers/`와 `shared/lib/query/`도 구현했다. 페이지 전용 `_hooks/`, `domains/place/`, Zustand 파일은 향후 배치 예시다. 공통 HTTP 코드와 `domains/example/`은 HTTP 통신·서버 상태 관리 절에 설명한다. 실제 코드가 필요할 때 파일을 추가하고 빈 디렉터리는 미리 만들지 않는다.
-
-```text
-frontend/src/
-├── app/
-│   ├── layout.tsx                     # html·body·공통 Provider 연결
-│   ├── globals.css
-│   ├── page.tsx                       # 예시 페이지 진입 화면
-│   ├── _providers/
-│   │   └── QueryProvider.tsx           # 공통 서버 상태 설정
-│   ├── (minimal)/
-│   │   ├── layout.tsx                 # 본문만 표시
-│   │   └── minimal-example/
-│   │       ├── page.tsx
-│   │       └── _components/
-│   │           └── MinimalExampleContent.tsx
-│   ├── (main)/
-│   │   ├── layout.tsx                 # MainLayout 적용
-│   │   └── main-example/
-│   │       ├── page.tsx
-│   │       ├── _components/
-│   │       │   └── MainExampleContent.tsx
-│   │       └── _hooks/                # 페이지 전용 Hook이 필요할 때
-│   └── (admin)/
-│       ├── layout.tsx                 # AdminLayout 적용
-│       └── admin-example/
-│           ├── page.tsx
-│           └── _components/
-│               └── AdminExampleContent.tsx
-├── domains/
-│   └── place/                         # 실제 장소 기능 구현 시 배치 예시
-│       ├── components/
-│       ├── hooks/
-│       │   ├── usePlacesQuery.ts
-│       │   └── usePlaceQuery.ts
-│       ├── api/
-│       │   └── placeApi.ts
-│       ├── queries/
-│       │   └── placeQueryKeys.ts
-│       ├── stores/
-│       └── types/
-│           └── place.type.ts          # 장소 요청·응답 타입의 배치 예시
-└── shared/
-    ├── components/
-    │   └── layout/
-    │       ├── MainLayout.tsx
-    │       ├── AdminLayout.tsx
-    │       ├── Header.tsx
-    │       ├── Sidebar.tsx
-    │       └── AdminSidebar.tsx
-    ├── hooks/
-    ├── lib/
-    │   ├── http/
-    │   │   └── apiClient.ts            # 공통 HTTP 인스턴스
-    │   └── query/
-    │       └── queryClient.ts          # 공통 서버 상태 설정
-    ├── stores/
-    │   └── useSidebarStore.ts          # 후속 Zustand 작업의 배치 예시
-    └── types/
-```
-
-### 코드 배치와 참조 방향
-
-| 위치 | 담당 |
-|---|---|
-| `app/` | URL, 레이아웃, 페이지 구성과 앱 초기 연결 |
-| 페이지의 `_components/`, `_hooks/` | 해당 페이지에서만 사용하는 컴포넌트와 Hook |
-| `domains/도메인명/components/` | 여러 화면에서 사용하는 도메인 전용 UI |
-| `domains/도메인명/api/` | 도메인 API 요청 함수 |
-| `domains/도메인명/queries/` | 도메인의 Query Key 등 TanStack Query 관련 정의 |
-| `domains/도메인명/hooks/` | 요청 함수와 Query Key를 연결하는 조회 Hook 등 |
-| `domains/도메인명/stores/` | 해당 도메인에서 공유하는 클라이언트 상태 |
-| `domains/도메인명/types/` | 도메인 요청·응답 등 타입 |
-| `shared/` | 도메인과 무관한 공통 UI·Hook·통신 설정·Store·타입 |
+여러 화면이 UI 상태를 공유해야 할 때 Zustand 도입을 검토한다. 현재 회원과 로그인 상태는 동일한 회원 조회 캐시에서 읽는다. 서버 데이터와 URL 조건은 소유한 위치에서 읽고 다른 저장소에 중복해서 넣지 않는다.
 
-참조 방향은 `app → domains → shared`와 `app → shared`로 유지한다. `domains`는 `app`을 참조하지 않고, `shared`는 `app`이나 `domains`를 참조하지 않는다.
+### 조회와 저장 연결하기
 
-페이지 전용 컴포넌트는 여러 도메인 기능을 조합할 수 있다. 일반 화면과 관리자 화면이 같은 장소 API를 사용해도 장소 코드는 `domains/place/`에서 관리한다. 페이지나 레이아웃 종류마다 도메인을 만들지 않는다.
+1. 도메인의 `api/`에 요청 함수를 작성하고 공통 Axios 인스턴스를 사용한다. 취소할 수 있는 조회는 TanStack Query의 `signal`을 Axios까지 전달한다.
+2. 도메인의 `queries/`에 Query Key 또는 `queryOptions`를 둔다. 서버 응답을 바꾸는 요청 조건은 Query Key에 포함한다. 여러 화면에서 같은 데이터를 읽을 때 정의된 키를 재사용한다. [장소 쿼리 키](src/domains/place/queries/placeQueryKeys.ts) · [관리자 장소 조회 옵션](src/domains/admin/queries/adminPlacesQuery.ts)
+3. 화면에서 `useQuery` 또는 도메인 Hook으로 데이터를 읽고 로딩과 오류를 처리한다. 저장에는 `useMutation`을 사용한다. 장소 초안 등록처럼 저장 결과가 여러 화면에 반영돼야 하면 기존 키를 사용해 관련 캐시를 무효화한다. [장소 조회 Hook](src/domains/place/hooks/usePlaces.ts) · [장소 초안 저장과 캐시 갱신](src/domains/admin/components/AdminPlaces.tsx)
 
-Query Key는 각 Hook에 문자열로 흩어 놓지 않고 도메인의 `queries/`에서 함께 정의한다. 서버 응답은 TanStack Query가 관리하고 Zustand에 복사하지 않는다. 도메인 전용 공유 UI 상태는 해당 도메인의 `stores/`에, 여러 도메인에서 사용하는 공통 UI 상태는 `shared/stores/`에 둔다. 한 컴포넌트의 상태와 URL 검색 조건은 [상태 관리 규칙](#상태-관리-규칙)을 따른다.
+공통 조회는 `staleTime` 30초, `gcTime` 5분을 사용한다. 데이터는 30초 동안 최신으로 취급되고, 화면에서 사용하지 않는 캐시는 5분 뒤 제거된다. 조회 실패 자동 재시도와 창 포커스 복귀 시 재조회는 끄고, 네트워크 재연결 시 오래된 활성 조회를 다시 요청한다. 화면 동작에 필요한 경우 개별 조회에서 옵션을 정한다. 장소 목록은 상세 복귀 때 캐시가 남아 있으면 자동으로 재조회하지 않는다. [Query Client 설정](src/shared/lib/query/queryClient.ts)
 
-### 타입 파일 이름
+서비스 헤더와 보호 페이지는 `useCurrentMember()`에서 `['member', 'me']` 캐시를 공유한다. `/api/v1/members/me`의 401은 비로그인 상태로 처리한다. 로그인, 로그아웃, 탈퇴는 이 캐시를 갱신한다. 개발 서버에서는 네트워크 탭과 TanStack Query Devtools에서 요청과 캐시를 확인할 수 있다. [회원 조회와 캐시 갱신](src/domains/member/queries/currentMemberQuery.ts) · [Query Provider](src/app/_providers/QueryProvider.tsx)
 
-`type`·`interface`를 모은 파일은 `*.type.ts`로 작성하고, 사용하는 기능의 소유 범위에 맞춰 배치한다. 편집기 탭에서도 구현 파일과 타입 파일을 구분하기 위한 규칙이다.
+### HTTP 통신과 example API
 
-- 도메인 타입 예시: `domains/example/types/example.type.ts`
-- 특정 공통 기능 전용 타입은 해당 기능 가까이에 둔다. HTTP 오류 타입은 `shared/lib/http/apiError.type.ts`에 배치한다. 여러 도메인에서 가져다 쓰더라도 HTTP 기능이 소유하는 타입이다.
-- 여러 기능에서 공통으로 사용하는 타입은 `shared/types/`에 배치한다.
-- 한 파일에서만 사용하는 작은 Props 타입은 해당 컴포넌트 파일에 둔다.
-- 타입을 가져올 때는 `import type`을 사용한다.
-- 실행 코드가 필요한 함수·클래스·상수·enum은 역할에 맞는 일반 `.ts` 파일에 둔다.
+`apiClient`는 `NEXT_PUBLIC_API_BASE_URL`, `withCredentials: true`, 10초 타임아웃을 적용한다. 도메인 요청 함수는 보통 `response.data`를 반환하고, 실패는 공통 `ApiError`로 전달한다. 화면에서는 `error.details.kind`와 HTTP 상태 같은 필요한 정보를 사용해 안내한다. [Axios 설정](src/shared/lib/http/apiClient.ts) · [오류 유형](src/shared/lib/http/apiError.type.ts)
 
-`*.type.ts`는 팀의 파일명 규칙이며 TypeScript의 선언 파일인 `*.d.ts`와 구분한다. API 요청·응답 DTO 타입에도 `*.type.ts`를 사용한다. 위 경로는 배치 예시이며 실제 코드가 필요할 때 추가한다.
+간단한 조회는 `getExample({ id, signal })`의 `GET /api/v1/examples/{id}`와 `useExampleQuery`를 참고한다. 입력값 검증 응답은 `previewExample`의 `POST /api/v1/examples/preview`에서 확인할 수 있다. [예제 API](src/domains/example/api/exampleApi.ts) · [예제 조회 Hook](src/domains/example/hooks/useExampleQuery.ts)
 
-### 레이아웃과 예시 URL
+### 장소 탐색과 상세 복귀
 
-최상위 `app/layout.tsx`에는 모든 화면에 필요한 `html`, `body`, 공통 Provider를 둔다. 각 Route Group의 `layout.tsx`는 레이아웃 컴포넌트에 `children`을 전달하고, 실제 헤더·사이드바 배치는 `shared/components/layout/`의 컴포넌트에서 구성한다. 최소 레이아웃은 `children`만 반환한다.
+- 목록과 지도 마커는 실제 장소 검색 API의 같은 응답을 사용한다. 지도 이동·확대가 끝난 뒤 300ms에 검색하고, 동일 필터로 새 영역을 조회하는 동안 이전 카드와 마커를 표시한다.
+- 검색 결과는 최대 50곳을 한 번에 받는다. 카드가 10개씩 추가로 표시될 때 API를 다시 호출하지 않는다. 결과가 50곳을 넘으면 지도 확대를 안내한다.
+- 적용된 검색 조건과 지도 범위는 URL에 저장한다. 상세 링크의 `returnTo`는 탐색 경로와 조건을 보존한다. 상세에서 돌아오면 남아 있는 캐시와 `sessionStorage`를 사용해 목록 위치와 선택을 복원한다. [장소 탐색](<src/app/(service)/_components/PlaceExplorer/PlaceExplorer.tsx>) · [목록 복귀](src/domains/place/lib/placeNavigation.ts)
 
-`(minimal)` 같은 Route Group은 URL에 포함되지 않는다. `_components`, `_hooks`, `_providers`는 라우팅 대상에서 제외하는 내부 디렉터리다.
+## 테스트
 
-| 예시 URL | 레이아웃 |
-|---|---|
-| `/` | 예시 페이지로 이동하는 진입 화면 |
-| `/minimal-example/` | 본문만 표시 |
-| `/main-example/` | 일반 헤더 + 사이드바 |
-| `/admin-example/` | 관리자 헤더 + 관리자 사이드바 |
+의존성을 설치한 뒤 저장소 루트에서 실행한다.
 
-위 세 가지 레이아웃과 페이지 전용 컴포넌트를 최소한의 Tailwind CSS 스타일로 구현했다. 레이아웃 예시는 `domains/example/`에 넣지 않는다. 해당 도메인은 구현된 HTTP 통신·조회 Hook 예시로 사용한다. 관리자 예시는 화면 구성을 보여 주며 권한 검사는 포함하지 않는다.
+| 명령 | 확인 범위 |
+| --- | --- |
+| `make frontend-test` | Vitest 테스트 전체 실행 |
+| `make frontend-lint` | ESLint 검사 |
+| `make frontend-typecheck` | Next.js 라우트 타입 생성 및 TypeScript 검사 |
+| `make frontend-build` | 정적 내보내기와 빌드 검사 |
 
-Axios 인스턴스와 Query Provider·Query Client·example Query Key는 구현했다. Zustand Store는 공유할 UI 상태가 확정된 뒤 추가한다. `domains/place/`는 향후 실제 장소 기능의 배치 예시이며 이번 예시 구현 범위에 포함하지 않는다.
+`frontend/`에서 테스트 하나만 실행하려면 `npm run test -- src/domains/example/api/exampleApi.test.ts`를 사용한다. 반복 작업 중에는 `npm run test:watch`로 변경 시 다시 실행할 수 있다.
 
-### 예시 확인과 새 페이지 추가
+- API와 로직은 기본 Node 환경에서 검증한다. MSW의 `server.use()`로 응답을 등록한다. 테스트 사이에 응답이 초기화되고 등록하지 않은 요청은 실패한다. `msw.test.ts`는 `fetch`로 도구 연결을 확인하는 예제다. [테스트 설정](tests/setup.ts) · [API 테스트 예제](src/domains/example/api/exampleApi.test.ts) · [MSW 연결 테스트](tests/msw.test.ts)
+- 화면 테스트는 첫 줄에 `// @vitest-environment jsdom`을 선언하고 `tests/setup-dom.ts`를 import한다. React Testing Library로 사용자에게 보이는 텍스트와 동작을 검증한다. 테스트는 대상 코드 가까이에 두고 검증 상황을 한국어로 작성한다. [화면 테스트 설정](tests/setup-dom.ts) · [관리자 접근 테스트](src/domains/admin/components/AdminAccess/AdminAccess.test.tsx)
+- 브라우저에서 확인해야 할 항목은 실제 백엔드·쿠키·카카오 SDK 연동과 반응형 배치다. UI를 변경했다면 넓은 화면과 좁은 화면에서 해당 흐름을 재현한다. 권한이 관련되면 비로그인, 일반 회원, 관리자 화면에서 메뉴와 접근 동작을 각각 확인한다.
 
-`make frontend-dev`로 실행한 뒤 `/`에서 각 예시 링크로 이동한다. 각 주소로 직접 접속하거나 새로고침하고, 예시 목록으로 돌아오는 링크도 확인한다. 일반·관리자 사이드바는 넓은 화면에서는 왼쪽에, 좁은 화면에서는 본문 위에 배치한다.
+## 정적 빌드와 배포
 
-새 페이지는 원하는 레이아웃의 Route Group 아래에 `page.tsx`를 추가한다. 페이지 전용 컴포넌트는 해당 경로의 `_components/`에 두고, 상위 그룹의 `layout.tsx`가 적용하는 헤더·사이드바를 페이지에서 다시 작성하지 않는다.
+`make frontend-build`는 `frontend/out/`에 정적 파일을 생성한다. `output: 'export'`와 `trailingSlash: true`를 사용하므로 `/places/detail/`은 `out/places/detail/index.html`로 제공된다. 호스트는 각 디렉터리의 `index.html`을 반환해야 하며, Next.js 이동에 필요한 `.txt`와 `_next/`를 포함해 `out/` 전체를 배포한다. [Next.js 설정](next.config.ts)
 
-이번 구현은 ESLint·타입 검사를 통과했다. 개발 서버의 네 경로에서 HTTP 200, 레이아웃별 헤더·사이드바 포함 여부, 진입·복귀 링크를 HTML로 확인했다. 레이아웃 작업 당시 정적 빌드는 생략했지만, 이후 정적 배포 검증에서 빌드와 사용자 브라우저의 링크 이동·뒤로 가기·새로고침·API 동작 확인을 마쳤다. 반응형 세부 디자인 검수는 별도다.
+로컬에서 빌드 결과를 확인하려면 개발 서버를 종료하고 Python 3가 설치된 환경에서 `make frontend-preview`를 실행한다. <http://localhost:3000>에서 장소 상세와 보호 페이지를 직접 열고 새로고침한다. 이 명령은 이미 만든 파일을 제공하므로 소스나 환경 설정을 바꾸면 먼저 다시 빌드한다.
 
-### 장소 상세 URL과 메타정보
-
-장소 상세 URL은 `/places/detail/?id=123`으로 정한다. 정적 상세 페이지를 제공하고 브라우저에서 `id`를 읽어 API로 해당 장소를 조회하는 방향이다. 실제 장소 페이지와 API 연결은 담당 기능 개발에서 구현한다.
-
-OUTPICK 공통 OG 태그를 제공하는 방향으로 두고, 장소별 OG 태그·검색엔진 노출 요구사항은 주요 기능 개발 후 팀과 논의한다. 장소별 정적 HTML 생성이나 Backend 공유 URL은 그때 검토한다.
-
-## 상태 관리 규칙
-
-상태의 성격과 사용 범위에 따라 관리 위치를 정한다.
-
-| 상태 | 관리 위치 | OUTPICK 예시 |
-|---|---|---|
-| 서버에서 조회하고 갱신하는 데이터 | TanStack Query | 장소 목록·상세, 관심 장소 목록, 로그인한 사용자 정보 |
-| 링크 공유·새로고침·뒤로 가기로 복원할 검색 조건 | URL 쿼리 | 검색어, 지역·종목 필터, 페이지 번호 |
-| 여러 컴포넌트나 페이지가 공유하는 클라이언트 상태 | Zustand | 공통 패널의 열림 상태, 여러 페이지에 걸친 임시 입력값 |
-| 한 컴포넌트 안에서 사용하는 상태 | React의 useState 또는 useReducer | 입력값, 해당 컴포넌트의 펼침 여부 |
-
-표의 예시는 관리 위치를 설명하기 위한 것으로, 해당 기능의 구현을 확정한 것은 아니다.
-
-### 서버 데이터는 TanStack Query에서 공유한다
-
-- 서버 응답을 Zustand에 복사해서 별도로 관리하지 않는다. 같은 데이터의 갱신 위치가 둘로 나뉘는 것을 피한다.
-- 헤더와 마이페이지에서 로그인한 사용자 정보를 함께 사용한다면 동일한 사용자 조회 쿼리 키를 사용한다.
-- 데이터 변경 후에는 관련 쿼리의 캐시 갱신 또는 무효화 정책을 적용한다. 구체적인 정책은 TanStack Query 구성 단계에서 정한다.
-- Axios는 HTTP 요청과 공통 오류 처리를 담당한다. 서버 데이터 캐시와 조회 상태는 TanStack Query에서 관리한다.
-
-### 검색 조건은 URL을 기준으로 관리한다
-
-- 공유하거나 복원해야 하는 검색어·필터·페이지 번호는 URL 쿼리에서 읽는다.
-- 동일한 검색 조건을 Zustand에도 저장해 서로 동기화하는 구조는 피한다.
-- 검색 실행 전의 임시 입력값은 컴포넌트 상태로 관리할 수 있다. 검색을 적용하면 URL을 갱신한다.
-
-### 공유 클라이언트 상태는 Zustand에서 관리한다
-
-- 서버 데이터와 URL로 관리할 상태를 제외하고, 여러 컴포넌트나 페이지가 함께 읽거나 변경하는 상태를 저장한다.
-- 한 컴포넌트에서만 사용하는 상태는 해당 컴포넌트에 둔다.
-- Store는 역할별로 구분하고, 기능 개발에 필요한 상태와 변경 함수를 추가한다.
-- 로그인 여부를 별도 boolean 값으로 저장해 사용자 조회 결과와 중복 관리하지 않는다.
-
-### 새로고침 후 유지 여부는 별도로 정한다
-
-- Zustand를 사용한다는 이유만으로 새로고침 후 상태가 유지되지는 않는다.
-- 브라우저 저장소에 저장할지는 상태별로 논의한다. 저장 기간과 초기화 시점도 함께 정한다.
-- HttpOnly 인증 쿠키의 JWT를 Zustand나 브라우저 저장소에 복사하지 않는다. 쿠키 저장과 전송은 브라우저가 담당한다.
-
-## 작업 계획
-
-### 장소 탐색의 지도 URL 상태
-
-지도 이동·확대가 끝나고 300ms 뒤에 현재 영역의 샘플 장소를 자동 검색한다. 목록과 마커에는 동일한 필터와 지도 영역을 적용하며 검색 결과 변경으로 지도 위치를 다시 맞추지 않는다.
-
-중심 좌표는 `lat`·`lng`, 카카오맵 확대 수준은 `level`에 저장한다. 마지막 검색 영역은 `south`·`west`·`north`·`east`에 저장해 모바일 목록에서도 새로고침·상세 복귀 시 결과를 복원한다. 지도를 표시하면 현재 화면 크기의 영역으로 다시 검색한다. 유효하지 않거나 일부가 누락된 지도 값은 무시한다.
-
-지도 이동은 History API의 `replaceState`로 현재 기록만 갱신하고 필터 변경은 `pushState`로 기록한다. 상세 링크의 `returnTo`에도 지도 쿼리를 포함한다. 실제 장소 검색 API 연결은 아직 구현하지 않았다.
-
-검색 화면의 `검색 링크 복사`는 클릭 시점의 현재 URL을 복사한다. 장소 상세의 `장소 링크 복사`는 목록 복귀 조건을 제외한 `/places/detail/?id=...` 주소를 복사한다. Clipboard API 실패 시 직접 선택해서 복사할 수 있는 주소 입력란을 표시한다. 로컬 주소를 공유하면 상대방의 컴퓨터에서는 접속할 수 없으므로 외부 공유는 배포 주소에서 확인한다.
-
-작업 순서와 진행 상태는 [사전 준비 계획서의 3.7 Frontend](../agents/00-4차%20팀프로젝트%20사전%20준비%20계획.md#37-frontend)에서 관리한다.
+Docker 배포는 정적 파일을 Nginx 이미지에 담는다. Docker 빌드용 `frontend/.env`에 카카오맵 JavaScript 키를 설정한다. 빌드·Docker Hub 업로드·EC2 적용은 배포 문서를 따른다. [프런트엔드 배포 안내](docs/deployment.md)

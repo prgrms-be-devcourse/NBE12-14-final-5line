@@ -23,8 +23,8 @@ export async function login(input: LoginInput): Promise<Member> {
   return data;
 }
 
-export async function currentMember(): Promise<Member> {
-  const { data } = await apiClient.get<Member>(memberPath);
+export async function currentMember(signal?: AbortSignal): Promise<Member> {
+  const { data } = await apiClient.get<Member>(memberPath, { signal });
   return data;
 }
 

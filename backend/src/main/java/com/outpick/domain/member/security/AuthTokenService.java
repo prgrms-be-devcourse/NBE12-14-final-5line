@@ -33,10 +33,12 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.jwt.JwsHeader;
-import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -70,7 +72,10 @@ public class AuthTokenService {
         SecretKey key = new SecretKeySpec(secret, "HmacSHA256");
         this.encoder = new NimbusJwtEncoder(new ImmutableSecret<>(key));
         var jwtDecoder = NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
-        jwtDecoder.setJwtValidator(JwtValidators.createDefaultWithIssuer("outpick"));
+        var timestampValidator = new JwtTimestampValidator();
+        timestampValidator.setClock(clock);
+        jwtDecoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+                timestampValidator, new JwtIssuerValidator("outpick")));
         this.decoder = jwtDecoder;
     }
 

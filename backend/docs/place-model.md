@@ -45,7 +45,7 @@ V2(장소)와 V3(공지)는 기존 NULL을 DRAFT로 전환하고 `NOT NULL DEFAU
 ## 아직 결정하지 않은 사항
 
 - **버전**: `Place.version`은 SQL의 `VARCHAR(20)`을 그대로 보존한 일반 문자열이다. JPA `@Version`이 아니며 동시 수정 충돌을 방지하지 않는다. 낙관적 잠금이 필요하면 의미·타입을 합의하고 후속 마이그레이션으로 적용한다.
-- **상태/시즌 코드**: `environment_type`, `season`, `operation_status`, `priority`, 출처 `type`의 코드 목록은 강제하지 않았다. 테스트의 `WINTER`, `OUTDOOR`, `OFFICIAL`은 테스트 입력이며 최종 계약이 아니다.
+- **상태/시즌 코드**: `environment_type`, `season`, `operation_status`, 출처 `type`의 코드 목록은 강제하지 않았다. 테스트의 `WINTER`, `OUTDOOR`, `OFFICIAL`은 테스트 입력이며 최종 계약이 아니다.
 - **대표 사진**: 초기 모델 범위에서는 제외했으며, 후속 V9에서 별도 `place_representative_image`를 추가했다. `place_media`·`media_asset`나 후기 모델은 변경하지 않았다. [대표 사진 모델과 계약](place-images.md)을 참고한다.
 - **운영시간/이용 조건**: 별도 저장 구조를 추가하지 않았다. 기존 `operation_status`와 공지만 보존한다.
 - 실제 장소 공개에 필요한 이름·주소·좌표·출처 검수 규칙은 등록/공개 서비스 계층에서 후속 구현해야 한다. 현재 저장 모델만으로 공개 적합성을 보장하지 않는다.

@@ -36,8 +36,12 @@ export function writePlaceMapParams(current: URLSearchParams, view: PlaceMapView
   if (bounds) {
     // 경계에 걸친 장소가 좌표 반올림 때문에 제외되지 않도록 바깥 방향으로 저장합니다.
     for (const key of ['south', 'west', 'north', 'east'] as const) {
+      const value = bounds[key];
+      const scaled = value * 1e6;
+      // 이미 저장 정밀도에 맞는 좌표는 곱셈 오차로 경계가 더 넓어지지 않게 합니다.
+      const nearest = Math.round(scaled) / 1e6;
       const round = key === 'south' || key === 'west' ? Math.floor : Math.ceil;
-      params.set(key, String(round(bounds[key] * 1e6) / 1e6));
+      params.set(key, String(value === nearest ? value : round(scaled) / 1e6));
     }
   }
   return params;

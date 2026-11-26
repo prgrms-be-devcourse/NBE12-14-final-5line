@@ -55,14 +55,14 @@ class PlacePersistenceTests {
     void migratesEmptyDatabase() {
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         assertThat(flyway.info().pending()).isEmpty();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("15");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("19");
         assertThat(jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '1' AND success = 1", Integer.class))
                 .isEqualTo(1);
         assertThat(jdbc.queryForList("SHOW TABLES", String.class)).contains(
                 "region", "activity_category", "activity_type", "place", "place_activity",
                 "place_activity_season", "source_record", "place_notice", "favorite", "review", "review_report",
-                "media_asset", "review_image", "review_image_data", "review_media", "refresh_token");
+                "media_asset", "review_image", "review_image_data", "review_media", "place_change_event", "notification", "refresh_token");
         // 두 번째 migrate는 기존 스키마와 데이터를 다시 생성하지 않는다.
         assertThat(flyway.migrate().migrationsExecuted).isZero();
     }
@@ -129,6 +129,41 @@ class PlacePersistenceTests {
             place = places.findById(place.getId()).orElseThrow();
             assertThat(place.getPublishStatus()).isEqualTo(status);
         }
+    }
+
+    @Test
+    @DisplayName("새 장소와 공지의 DB 기본값은 검수 전이며 잘못된 게시 상태는 저장할 수 없다")
+    void enforcesPublishStatusDefaultsAndConstraints() {
+        var region = region();
+        jdbc.update("INSERT INTO place(region_id, name) VALUES (?, ?)", region.getId(), "게시 상태 기본값 검증");
+        var place = places.findById(jdbc.queryForObject(
+                "SELECT place_id FROM place WHERE region_id = ?", Long.class, region.getId())).orElseThrow();
+        assertThat(place.getPublishStatus()).isEqualTo(PlacePublishStatus.DRAFT);
+
+        var source = SourceRecord.builder().place(place).build();
+        entityManager.persist(source);
+        jdbc.update("INSERT INTO place_notice(place_id, source_record_id, title) VALUES (?, ?, ?)",
+                place.getId(), source.getId(), "공지 게시 상태 기본값 검증");
+        assertThat(jdbc.queryForObject(
+                "SELECT publish_status FROM place_notice WHERE source_record_id = ?", Byte.class, source.getId()))
+                .isEqualTo(PlacePublishStatus.DRAFT.getCode());
+
+        assertThatThrownBy(() -> jdbc.update("UPDATE place SET publish_status = 3 WHERE place_id = ?", place.getId()))
+                .rootCause().isInstanceOfSatisfying(SQLException.class, error -> {
+                    assertThat(error.getErrorCode()).isEqualTo(3819);
+                    assertThat(error.getMessage()).contains("ck_place_publish_status");
+                });
+        assertThatThrownBy(() -> jdbc.update("UPDATE place SET publish_status = NULL WHERE place_id = ?", place.getId()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbc.update(
+                "UPDATE place_notice SET publish_status = 3 WHERE source_record_id = ?", source.getId()))
+                .rootCause().isInstanceOfSatisfying(SQLException.class, error -> {
+                    assertThat(error.getErrorCode()).isEqualTo(3819);
+                    assertThat(error.getMessage()).contains("ck_place_notice_publish_status");
+                });
+        assertThatThrownBy(() -> jdbc.update(
+                "UPDATE place_notice SET publish_status = NULL WHERE source_record_id = ?", source.getId()))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

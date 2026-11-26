@@ -13,8 +13,8 @@
 - DB의 `introduce`는 응답의 `description`으로 변환한다. 미확인 기본 정보는 NULL을 유지한다. `operationStatus`를 근거 없이 영업 중으로 채우지 않는다.
 - `representativeImage`: 검수된 대표 사진의 원본 URL 문자열이며 사진이 없으면 NULL이다. 출처를 나타내는 `imageAttribution`, `imageSourceUrl`, `imageLicense`가 함께 반환된다. [대표 사진 저장·표시 정책](place-images.md)을 참고한다.
 - `activities`: `placeActivityId`, `activityTypeId`, `activityTypeName`, `environmentType`, `seasons` 목록. 시즌은 장소 전체가 아닌 해당 장소별 종목에 묶는다. 활동은 연결 ID 오름차순, 시즌은 DB 문자열 오름차순으로 정렬한다.
-- `sources`: 확인일(`verifiedAt`)이 있는 해당 장소의 출처만 반환한다. `sourceRecordId`, `type`, `url`, `verifiedFields`, `originUpdatedAt`, `verifiedAt`을 포함한다. 확인일 내림차순, 같은 시각은 ID 내림차순이다. 내부 필드인 `verifierId`, `usageTermsMemo`, `originId`는 제외한다.
-- `notices`: 공개 상태이며 유효기간 안에 있고 출처 확인일이 있는 해당 장소의 공지만 반환한다. `placeNoticeId`, `title`, `content`, `priority`, `validFrom`, `validUntil`, `sourceRecordId`를 포함한다. 시작 시각 내림차순, 같은 시각은 ID 내림차순이다. 중요도 코드의 우선순위는 아직 정하지 않아 순서를 임의로 해석하지 않는다.
+- `sources`: 확인일(`verifiedAt`)이 있는 해당 장소의 출처만 반환한다. 공지 전용 출처(`verifiedFields: "notice"`)는 장소 상세에 표시되는 공지가 참조할 때만 반환한다. `sourceRecordId`, `type`, `url`, `verifiedFields`, `originUpdatedAt`, `verifiedAt`을 포함한다. 확인일 내림차순, 같은 시각은 ID 내림차순이다. 내부 필드인 `verifierId`, `usageTermsMemo`, `originId`는 제외한다.
+- `notices`: 공개 상태이며 유효기간 안에 있고 출처 확인일이 있는 해당 장소의 공지만 반환한다. `placeNoticeId`, `title`, `content`, `validFrom`, `validUntil`, `sourceRecordId`를 포함한다. 시작 시각 내림차순, 같은 시각은 ID 내림차순이다.
 
 활동·시즌·공지·출처가 없으면 빈 배열을 반환한다. 대표 사진·운영시간·이용 조건 중 확보하지 못한 정보를 만들어 반환하지 않는다. 장소 기본 정보가 NULL이어도 저장된 공개 상태만으로 조회 가능한 현재 한계는 등록/공개 검수 서비스에서 후속 보완해야 한다.
 

@@ -8,7 +8,8 @@ if [[ $# -ne 0 ]]; then
     exit 1
 fi
 
-for path in .env compose.deploy.yaml compose.places.yaml backend/scripts/review-initial-tour-places.sql; do
+publication_sql=backend/scripts/review-initial-tour-places.sql
+for path in .env compose.deploy.yaml compose.places.yaml "$publication_sql"; do
     [[ -f "$path" ]] || { echo "필요한 파일이 없습니다: $path" >&2; exit 1; }
 done
 
@@ -32,9 +33,8 @@ echo "2/4 초기 장소 수집"
     -cp /app/app.jar \
     org.springframework.boot.loader.launch.PropertiesLauncher
 
-echo "3/4 조건에 맞는 초기 장소 공개"
-"${compose[@]}" exec -T mysql sh -c "$mysql_command" \
-    < backend/scripts/review-initial-tour-places.sql
+echo "3/4 검수된 초기 장소와 지도 검증용 장소 공개"
+"${compose[@]}" exec -T mysql sh -c "$mysql_command" < "$publication_sql"
 
 echo "4/4 수집한 장소와 공개 상태 조회"
 "${compose[@]}" exec -T mysql sh -c "$mysql_command" <<'SQL'

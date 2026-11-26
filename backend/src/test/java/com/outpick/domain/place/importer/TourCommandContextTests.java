@@ -1,5 +1,6 @@
 package com.outpick.domain.place.importer;
 
+import com.outpick.domain.notification.service.PlaceNotificationScheduler;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +30,7 @@ class TourCommandContextTests {
     void startsWithoutServletSecurity() {
         assertThat(context.getBean(TourImportWriter.class)).isNotNull();
         assertThat(context.getBeansOfType(SecurityFilterChain.class)).isEmpty();
+        assertThat(context.getBeansOfType(PlaceNotificationScheduler.class)).isEmpty();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tour_api_import", Integer.class)).isZero();
     }
 }
