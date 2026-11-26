@@ -29,6 +29,7 @@ public class TourOperatingChangeCommand {
             throw new IllegalArgumentException("비교 건수는 1~500, 시작 장소 ID는 0 이상이어야 합니다.");
         }
         var client = new TourApiOperatingClient(new TourApiHttpTransport(System.getenv("TOUR_API_KEY")));
+        boolean saveCandidates = Boolean.parseBoolean(System.getenv("TOUR_OPERATING_REPORT_SAVE_CANDIDATES"));
         TourOperatingChangeReport.Report report;
         try (var context = new SpringApplicationBuilder(ReportConfiguration.class)
                 .web(WebApplicationType.NONE)
@@ -36,10 +37,15 @@ public class TourOperatingChangeCommand {
                         "--spring.jpa.hibernate.ddl-auto=none")) {
             var baselines = context.getBean(TourOperatingChangeReader.class).findPublishedAfter(after, limit);
             report = new TourOperatingChangeReport().compare(baselines, client, after);
+            var json = JsonMapper.builder().build().writerWithDefaultPrettyPrinter().writeValueAsString(report);
+            Files.writeString(output, json + System.lineSeparator(), StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE_NEW);
+            if (saveCandidates) {
+                var result = context.getBean(TourOperatingCandidateStore.class).save(report.candidates());
+                System.out.printf("TOUR_OPERATING_CANDIDATES saved=%d duplicate=%d stale=%d%n",
+                        result.saved(), result.duplicate(), result.stale());
+            }
         }
-        var json = JsonMapper.builder().build().writerWithDefaultPrettyPrinter().writeValueAsString(report);
-        Files.writeString(output, json + System.lineSeparator(), StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE_NEW);
         System.out.printf("TOUR_OPERATING_COMPARE selected=%d requested=%d changed=%d unchanged=%d noData=%d failed=%d stopped=%s%n",
                 report.selected(), report.requested(), report.candidates().size(), report.unchanged(), report.noData(),
                 report.failed(), report.stopped());
@@ -48,6 +54,6 @@ public class TourOperatingChangeCommand {
 
     // 웹 서버용 애플리케이션 빈을 로드하지 않고 DB 자동 설정과 비교 조회만 사용한다.
     @EnableAutoConfiguration
-    @Import(TourOperatingChangeReader.class)
+    @Import({TourOperatingChangeReader.class, TourOperatingCandidateStore.class})
     static class ReportConfiguration {}
 }

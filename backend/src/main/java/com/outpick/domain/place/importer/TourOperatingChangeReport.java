@@ -77,7 +77,7 @@ final class TourOperatingChangeReport {
         }
     }
 
-    private static String normalize(String value) {
+    static String normalize(String value) {
         return value == null ? null : WHITESPACE.matcher(value).replaceAll(" ").strip();
     }
 

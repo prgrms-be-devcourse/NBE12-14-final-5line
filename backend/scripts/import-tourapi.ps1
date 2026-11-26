@@ -2,7 +2,8 @@ param(
     [ValidateSet('importTourPlaces', 'importPlaceOperatingInfo', 'comparePlaceOperatingInfo')][string]$Task = 'importTourPlaces',
     [string]$ReportPath,
     [ValidateRange(1, 500)][int]$Limit = 20,
-    [ValidateRange(0, [long]::MaxValue)][long]$AfterPlaceId = 0
+    [ValidateRange(0, [long]::MaxValue)][long]$AfterPlaceId = 0,
+    [switch]$SaveCandidates
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
@@ -32,6 +33,7 @@ if ($Task -eq 'comparePlaceOperatingInfo') {
     $env:TOUR_OPERATING_REPORT_PATH = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ReportPath)
     $env:TOUR_OPERATING_REPORT_LIMIT = "$Limit"
     $env:TOUR_OPERATING_REPORT_AFTER_ID = "$AfterPlaceId"
+    $env:TOUR_OPERATING_REPORT_SAVE_CANDIDATES = "$($SaveCandidates.IsPresent)"
 }
 & (Join-Path $projectRoot 'backend/gradlew.bat') -p (Join-Path $projectRoot 'backend') $Task --no-daemon
 exit $LASTEXITCODE

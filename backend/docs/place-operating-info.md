@@ -50,6 +50,10 @@ TOUR_OPERATING_REPORT_PATH=/tmp/outpick-operating-review.json TOUR_OPERATING_REP
 
 HTTP 429가 발생하면 후속 요청을 멈추고 그때까지의 결과를 저장한다. 다음 범위를 확인할 때는 새 출력 파일 이름을 사용하고 `lastCompletedPlaceId`를 PowerShell의 `-AfterPlaceId` 또는 환경 변수 `TOUR_OPERATING_REPORT_AFTER_ID`에 넣는다. 요청 실패는 보고서를 기록한 뒤 종료 코드 1을 반환하므로, 일반 실패 항목도 `issues`에서 확인한다. 운영자 승인 화면과 알림 연동은 이 보고서의 후속 작업이다.
 
+검수 후보를 DB에 보관하려면 백엔드 시작으로 Flyway V19를 적용한 뒤, 위 명령에 PowerShell `-SaveCandidates` 또는 macOS/Linux 환경 변수 `TOUR_OPERATING_REPORT_SAVE_CANDIDATES=true`를 추가한다. JSON은 먼저 기록하고 장소·항목별 후보를 `place_operating_change_candidate`에 저장한다.
+
+아직 처리하지 않은 같은 이전 값·새 값 조합은 한 건으로 유지한다. 저장 직전에 공개 상태와 현재 값을 다시 확인해 비교 후 바뀐 후보는 건너뛴다. 실행 결과의 `saved`, `duplicate`, `stale`은 각각 저장·중복 제외·기준 변경으로 제외된 항목 수다. 웹 서버가 조회하는 운영 안내에는 후보를 적용하지 않는다.
+
 ## 상세 API와 화면
 
 `GET /api/v1/places/{placeId}`에 다음 필드를 가진 nullable `operatingInfo`가 추가됐다.
