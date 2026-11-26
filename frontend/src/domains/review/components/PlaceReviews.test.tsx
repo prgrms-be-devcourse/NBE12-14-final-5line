@@ -5,7 +5,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { currentMember } from '@/domains/member/api/memberApi';
 import { createReview, listReviews, uploadReviewPhoto } from '../api/reviewApi';
-import PlaceReviews from './PlaceReviews';
+import PlaceReviews from './PlaceReviews/PlaceReviews';
 
 vi.mock('@/domains/member/api/memberApi', () => ({ currentMember: vi.fn() }));
 vi.mock('../api/reviewApi', () => ({
