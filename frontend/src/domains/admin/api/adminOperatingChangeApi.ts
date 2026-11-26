@@ -3,8 +3,6 @@ import { apiClient } from '@/shared/lib/http/apiClient';
 
 export type OperatingChange = {
   candidateId: number;
-  placeId: number;
-  placeName: string | null;
   field: string;
   previousValue: string | null;
   newValue: string;
@@ -13,7 +11,8 @@ export type OperatingChange = {
   detectedAt: string;
 };
 
-type OperatingChangePage = { items: OperatingChange[]; page: number; size: number; totalElements: number };
+type OperatingChangeGroup = { placeId: number; placeName: string | null; candidates: OperatingChange[] };
+type OperatingChangePage = { items: OperatingChangeGroup[]; page: number; size: number; totalElements: number };
 
 export type OperatingChangeResolution = {
   candidateId: number;

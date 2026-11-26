@@ -25,9 +25,14 @@ export default function AdminOperatingChanges() {
   const mutation = useMutation({
     mutationFn: resolveOperatingChange,
     onMutate: () => setMessage(''),
-    onSuccess: async (_, { placeId, decision }) => {
+    onSuccess: async (_, { placeId, candidateId, decision }) => {
       setMessage(decision === 'APPROVED' ? '변경 내용을 공개 상세에 반영했어요.' : '변경 후보를 반려했어요.');
-      if (page > 0 && query.data?.items.length === 1) setPage(page - 1);
+      const remainingGroups = query.data?.items;
+      if (page > 0 && remainingGroups?.length === 1
+        && remainingGroups[0].candidates.length === 1
+        && remainingGroups[0].candidates[0].candidateId === candidateId) {
+        setPage(page - 1);
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: listKey }),
         decision === 'APPROVED'
@@ -50,13 +55,24 @@ export default function AdminOperatingChanges() {
         <button className={button} onClick={() => void query.refetch()}>다시 시도</button>
       </div>}
       {query.data && <>
-        <p className="text-sm text-slate-600">검수 대기 {query.data.totalElements}건</p>
+        <p className="text-sm text-slate-600">검수 대기 {query.data.totalElements}곳</p>
         {query.data.items.length === 0 && <p className="rounded-xl border border-slate-200 p-5">이 페이지에 검수할 후보가 없어요.</p>}
-        {query.data.items.map(candidate => (
-          <CandidateCard key={candidate.candidateId} candidate={candidate}
-            disabled={mutation.isPending}
-            error={mutation.variables?.candidateId === candidate.candidateId ? mutation.error?.message : undefined}
-            resolve={mutation.mutate} />
+        {query.data.items.map(place => (
+          <article key={place.placeId} aria-labelledby={`review-place-${place.placeId}`}
+            className="rounded-xl border border-slate-200 bg-white">
+            <header className="flex flex-wrap items-baseline justify-between gap-x-3 px-5 py-4">
+              <h2 id={`review-place-${place.placeId}`} className="text-lg font-bold">
+                {place.placeName ?? `장소 #${place.placeId}`}
+              </h2>
+              <p className="text-sm text-slate-600">변경 {place.candidates.length}건</p>
+            </header>
+            {place.candidates.map(candidate => (
+              <CandidateReview key={candidate.candidateId} placeId={place.placeId} candidate={candidate}
+                disabled={mutation.isPending}
+                error={mutation.variables?.candidateId === candidate.candidateId ? mutation.error?.message : undefined}
+                resolve={mutation.mutate} />
+            ))}
+          </article>
         ))}
         {(page > 0 || (page + 1) * query.data.size < query.data.totalElements) && (
           <nav aria-label="검수 후보 페이지" className="flex gap-3">
@@ -70,7 +86,8 @@ export default function AdminOperatingChanges() {
   );
 }
 
-function CandidateCard({ candidate, disabled, error, resolve }: {
+function CandidateReview({ placeId, candidate, disabled, error, resolve }: {
+  placeId: number;
   candidate: OperatingChange;
   disabled: boolean;
   error?: string;
@@ -79,16 +96,19 @@ function CandidateCard({ candidate, disabled, error, resolve }: {
   const [reason, setReason] = useState('');
   const field = fieldLabels[candidate.field] ?? candidate.field;
   const reasonId = `review-reason-${candidate.candidateId}`;
+  const fieldId = `review-field-${candidate.candidateId}`;
 
   function submit(decision: OperatingChangeResolution['decision']) {
-    resolve({ candidateId: candidate.candidateId, placeId: candidate.placeId, decision, reason: reason.trim() });
+    resolve({ candidateId: candidate.candidateId, placeId, decision, reason: reason.trim() });
   }
 
   return (
-    <article className="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
-      <header>
-        <h2 className="text-lg font-bold">{candidate.placeName ?? `장소 #${candidate.placeId}`}</h2>
-        <p className="text-sm text-slate-600">{field} · {candidate.detectedAt.replace('T', ' ').slice(0, 19)}</p>
+    <section aria-labelledby={fieldId} className="space-y-4 border-t border-slate-200 p-5">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <h3 id={fieldId} className="text-base font-bold">{field}</h3>
+        <time dateTime={candidate.detectedAt} className="text-sm text-slate-600">
+          {candidate.detectedAt.replace('T', ' ').slice(0, 19)}
+        </time>
       </header>
       <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <ComparedValue label="이전 값" value={candidate.previousValue} url={candidate.previousSourceUrl} />
@@ -106,7 +126,7 @@ function CandidateCard({ candidate, disabled, error, resolve }: {
         <button type="button" className={`${button} border-indigo-700 bg-indigo-700 text-white`}
           disabled={disabled} onClick={() => submit('APPROVED')}>승인</button>
       </div>
-    </article>
+    </section>
   );
 }
 

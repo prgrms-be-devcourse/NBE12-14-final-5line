@@ -14,8 +14,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDateTime;
 import java.time.Clock;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Objects;
 
 import static com.outpick.domain.place.exception.PlaceErrorCode.*;
@@ -37,20 +40,40 @@ public class AdminOperatingChangeService {
     public AdminOperatingChangePageResponse pending(long memberId, int page, int size) {
         requireAdmin(memberId);
         byte published = PlacePublishStatus.PUBLISHED.getCode();
-        long total = jdbc.queryForObject("SELECT COUNT(*) " + PENDING_PUBLIC_CANDIDATES, Long.class, published);
-        var items = jdbc.query("""
+        long total = jdbc.queryForObject("SELECT COUNT(DISTINCT c.place_id) " + PENDING_PUBLIC_CANDIDATES,
+                Long.class, published);
+        var groups = new LinkedHashMap<ReviewPlace, List<AdminOperatingChangePageResponse.Candidate>>();
+        jdbc.query("""
+                WITH page_places AS (
+                    SELECT c.place_id, MAX(c.detected_at) AS latest_detected_at
+                """ + PENDING_PUBLIC_CANDIDATES + """
+                    GROUP BY c.place_id
+                    ORDER BY latest_detected_at DESC, c.place_id DESC
+                    LIMIT ? OFFSET ?
+                )
                 SELECT c.candidate_id, c.place_id, p.name, c.field_name, c.previous_value,
                        c.new_value, c.previous_source_url, c.new_source_url, c.detected_at
-                """ + PENDING_PUBLIC_CANDIDATES + """
-                ORDER BY c.detected_at DESC, c.candidate_id DESC
-                LIMIT ? OFFSET ?
-                """, (row, index) -> new AdminOperatingChangePageResponse.Item(
-                row.getLong("candidate_id"), row.getLong("place_id"), row.getString("name"),
-                row.getString("field_name"), row.getString("previous_value"), row.getString("new_value"),
-                row.getString("previous_source_url"), row.getString("new_source_url"),
-                row.getObject("detected_at", LocalDateTime.class)), published, size, (long) page * size);
+                FROM page_places selected
+                JOIN place p ON p.place_id = selected.place_id
+                JOIN place_operating_change_candidate c ON c.place_id = selected.place_id
+                WHERE c.resolved_at IS NULL
+                ORDER BY selected.latest_detected_at DESC, selected.place_id DESC, c.detected_at DESC, c.candidate_id DESC
+                """, row -> {
+            var place = new ReviewPlace(row.getLong("place_id"), row.getString("name"));
+            var candidate = new AdminOperatingChangePageResponse.Candidate(
+                    row.getLong("candidate_id"), row.getString("field_name"), row.getString("previous_value"),
+                    row.getString("new_value"), row.getString("previous_source_url"), row.getString("new_source_url"),
+                    row.getObject("detected_at", LocalDateTime.class));
+            groups.computeIfAbsent(place, key -> new ArrayList<>()).add(candidate);
+        }, published, size, (long) page * size);
+        var items = groups.entrySet().stream()
+                .map(group -> new AdminOperatingChangePageResponse.Item(
+                        group.getKey().id(), group.getKey().name(), group.getValue()))
+                .toList();
         return new AdminOperatingChangePageResponse(items, page, size, total);
     }
+
+    private record ReviewPlace(long id, String name) {}
 
     @Transactional
     public void resolve(long memberId, long candidateId, AdminOperatingChangeResolutionRequest request) {

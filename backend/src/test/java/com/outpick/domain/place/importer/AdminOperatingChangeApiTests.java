@@ -59,13 +59,14 @@ class AdminOperatingChangeApiTests {
     }
 
     @Test
-    @DisplayName("운영자는 공개 장소의 미처리 후보만 최신순으로 나눠 보고 이전 값과 출처를 확인할 수 있다")
+    @DisplayName("페이지 크기가 1이어도 같은 공개 장소의 미처리 후보를 한 묶음에 모두 반환한다")
     void returnsPendingPublicCandidatesWithValuesAndSources() throws Exception {
         var admin = members.saveAndFlush(Member.createAdmin("operation-review-admin@example.com", "운영자", "hash"));
         long first = place("401", PlacePublishStatus.PUBLISHED);
         long second = place("402", PlacePublishStatus.PUBLISHED);
         long hidden = place("403", PlacePublishStatus.HIDDEN);
         addCandidate(first, "10:00", false);
+        addCandidate(second, "usageFee", null, "65,000원", false);
         addCandidate(second, "11:00", false);
         addCandidate(second, "12:00", true);
         addCandidate(hidden, "13:00", false);
@@ -76,15 +77,17 @@ class AdminOperatingChangeApiTests {
                 .andExpect(jsonPath("$.page").value(0))
                 .andExpect(jsonPath("$.size").value(1))
                 .andExpect(jsonPath("$.items.length()").value(1))
-                .andExpect(jsonPath("$.items[0].candidateId").isNumber())
                 .andExpect(jsonPath("$.items[0].placeId").value(second))
                 .andExpect(jsonPath("$.items[0].placeName").value("테스트 시설"))
-                .andExpect(jsonPath("$.items[0].field").value("operatingHours"))
-                .andExpect(jsonPath("$.items[0].previousValue").value("09:00"))
-                .andExpect(jsonPath("$.items[0].newValue").value("11:00"))
-                .andExpect(jsonPath("$.items[0].previousSourceUrl").value("https://example.com/previous"))
-                .andExpect(jsonPath("$.items[0].newSourceUrl").value("https://www.data.go.kr/data/15101578/openapi.do"))
-                .andExpect(jsonPath("$.items[0].detectedAt").exists());
+                .andExpect(jsonPath("$.items[0].candidates.length()").value(2))
+                .andExpect(jsonPath("$.items[0].candidates[0].candidateId").isNumber())
+                .andExpect(jsonPath("$.items[0].candidates[0].field").value("operatingHours"))
+                .andExpect(jsonPath("$.items[0].candidates[0].previousValue").value("09:00"))
+                .andExpect(jsonPath("$.items[0].candidates[0].newValue").value("11:00"))
+                .andExpect(jsonPath("$.items[0].candidates[0].previousSourceUrl").value("https://example.com/previous"))
+                .andExpect(jsonPath("$.items[0].candidates[0].newSourceUrl").value("https://www.data.go.kr/data/15101578/openapi.do"))
+                .andExpect(jsonPath("$.items[0].candidates[0].detectedAt").exists())
+                .andExpect(jsonPath("$.items[0].candidates[1].field").value("usageFee"));
         mvc.perform(get(PATH).param("page", "1").param("size", "1").session(session(admin)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].placeId").value(first));
@@ -168,13 +171,17 @@ class AdminOperatingChangeApiTests {
     }
 
     private void addCandidate(long placeId, String value, boolean resolved) {
+        addCandidate(placeId, "operatingHours", "09:00", value, resolved);
+    }
+
+    private void addCandidate(long placeId, String field, String previousValue, String value, boolean resolved) {
         jdbc.update("""
                 INSERT INTO place_operating_change_candidate (place_id, field_name, previous_value, new_value,
                     previous_source_url, new_source_url, values_hash, detected_at, resolved_at)
-                VALUES (?, 'operatingHours', '09:00', ?, 'https://example.com/previous',
+                VALUES (?, ?, ?, ?, 'https://example.com/previous',
                     'https://www.data.go.kr/data/15101578/openapi.do', UNHEX(SHA2(?, 256)),
                     '2026-11-26 09:00:00', CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END)
-                """, placeId, value, value, resolved);
+                """, placeId, field, previousValue, value, value, resolved);
     }
 
     private MockHttpSession session(Member member) {

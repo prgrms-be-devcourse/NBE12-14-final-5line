@@ -54,7 +54,7 @@ HTTP 429가 발생하면 후속 요청을 멈추고 그때까지의 결과를 �
 
 같은 장소·항목·이전 값·새 값 조합의 대기 후보나 반려 이력이 있으면 후보 저장을 건너뛴다. 저장 직전에 공개 상태와 현재 값을 다시 확인해 비교 후 바뀐 후보는 건너뛴다. 실행 결과의 `saved`, `duplicate`, `stale`은 각각 저장·중복 또는 동일 반려 이력·기준 변경으로 제외된 항목 수다.
 
-운영자 검수 화면은 `GET /api/v1/admin/place-operating-changes?page=0&size=20`으로 공개 장소의 미처리 후보를 조회할 수 있다. 운영자 세션이 필요하다. 탐지 시각이 같으면 후보 ID가 큰 쪽을 먼저 반환한다. 각 항목에는 후보 ID, 장소 ID·이름, 변경 필드, 이전 값·새 값, 각각의 출처 URL, 탐지 시각이 포함된다. 응답의 `totalElements`는 검수할 항목 수다. 한 장소에서 여러 필드가 바뀌면 각각 한 항목으로 센다.
+운영자 검수 화면은 `GET /api/v1/admin/place-operating-changes?page=0&size=20`으로 공개 장소의 미처리 후보를 장소 단위로 조회한다. `items`에는 장소 ID·이름과 해당 장소의 전체 미처리 `candidates`를 담는다. 후보마다 후보 ID, 변경 필드, 이전 값·새 값, 각각의 출처 URL, 탐지 시각을 반환한다. `size`와 `totalElements`의 단위는 장소 수다. 장소는 가장 최근인 후보의 탐지 시각순, 후보는 탐지 시각과 후보 ID의 내림차순으로 정렬한다. 운영자 세션이 필요하다.
 
 운영자 메뉴의 **운영 정보 검수**에서 이전 값·새 값과 출처를 보고 처리한다. `PATCH /api/v1/admin/place-operating-changes/{candidateId}/resolution`에 운영자 세션과 CSRF 헤더를 보내고, 본문에 `decision`(`APPROVED` 또는 `REJECTED`)과 `reason`(최대 500자, 반려 시 필수)을 넣는다. 성공 응답은 `204 No Content`다.
 
