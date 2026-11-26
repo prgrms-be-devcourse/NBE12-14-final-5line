@@ -38,13 +38,14 @@ class TourOperatingCandidateStore {
 
     private Summary savePlace(TourOperatingChangeReport.Candidate candidate) {
         var baselines = jdbc.query("""
-                SELECT o.source_content_id, o.operating_hours, o.rest_days, o.contact_phone
+                SELECT o.source_content_id, o.operating_hours, o.rest_days, o.contact_phone, o.opening_period, o.usage_fee
                 FROM place_operating_info o
                 JOIN place p ON p.place_id = o.place_id
                 WHERE o.place_id = ? AND o.source_content_id = ? AND p.publish_status = ?
                 FOR UPDATE
                 """, (row, index) -> new TourOperatingSnapshot(row.getString("source_content_id"),
-                row.getString("operating_hours"), row.getString("rest_days"), row.getString("contact_phone")),
+                row.getString("operating_hours"), row.getString("rest_days"), row.getString("contact_phone"),
+                row.getString("opening_period"), row.getString("usage_fee")),
                 candidate.placeId(), candidate.contentId(), PlacePublishStatus.PUBLISHED.getCode());
         if (baselines.isEmpty()) return new Summary(0, 0, candidate.changes().size());
 
@@ -55,6 +56,8 @@ class TourOperatingCandidateStore {
                 case "operatingHours" -> baseline.operatingHours();
                 case "restDays" -> baseline.restDays();
                 case "contactPhone" -> baseline.contactPhone();
+                case "openingPeriod" -> baseline.openingPeriod();
+                case "usageFee" -> baseline.usageFee();
                 default -> throw new IllegalArgumentException("지원하지 않는 운영 정보 항목입니다.");
             };
             var previous = TourOperatingChangeReport.normalize(change.previousValue());

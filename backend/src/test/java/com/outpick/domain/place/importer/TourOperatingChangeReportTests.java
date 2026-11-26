@@ -41,6 +41,23 @@ class TourOperatingChangeReportTests {
     }
 
     @Test
+    @DisplayName("개장 기간이 응답에서 빠져도 기존 값을 유지하고 새 이용요금만 변경 후보에 넣는다")
+    void reportsNewFeeWithoutTreatingMissingOpeningPeriodAsDeletion() {
+        var baseline = new TourOperatingChangeReport.Baseline(1, "장소", "https://example.com/previous",
+                new TourOperatingSnapshot("1", null, null, null, "12월~2월", null));
+        var client = new TourApiOperatingClient(id -> response(id, Map.of("usefeeleports", "성인 60,000원")));
+
+        var report = new TourOperatingChangeReport().compare(List.of(baseline), client, 0);
+
+        assertThat(report.candidates()).singleElement().satisfies(candidate -> assertThat(candidate.changes())
+                .containsExactly(new TourOperatingChangeReport.FieldChange("usageFee", null, "성인 60,000원")));
+        assertThat(report.issues()).singleElement().satisfies(issue -> {
+            assertThat(issue.reason()).isEqualTo("MISSING_FIELDS");
+            assertThat(issue.fields()).containsExactly("openingPeriod");
+        });
+    }
+
+    @Test
     @DisplayName("요청 제한을 받으면 후속 호출을 멈추고 마지막 완료 장소를 기록한다")
     void stopsOnRateLimitWithoutSkippingTheLimitedPlaceInTheCursor() {
         var calls = new ArrayList<String>();

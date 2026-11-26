@@ -27,6 +27,10 @@ public class PlaceOperatingInfo {
     private String restDays;
     @Column(name = "contact_phone", length = 100)
     private String contactPhone;
+    @Column(name = "opening_period", columnDefinition = "TEXT")
+    private String openingPeriod;
+    @Column(name = "usage_fee", columnDefinition = "TEXT")
+    private String usageFee;
     @Column(name = "source_url", nullable = false, length = 1000)
     private String sourceUrl;
     @Column(name = "collected_at", nullable = false, columnDefinition = "DATETIME")
@@ -43,13 +47,21 @@ public class PlaceOperatingInfo {
     private LocalDateTime comparedAt;
 
     public PlaceOperatingInfo(Place place, String contentId, String hours, String restDays, String phone, LocalDateTime collectedAt) {
+        this(place, contentId, hours, restDays, phone, null, null, collectedAt);
+    }
+
+    public PlaceOperatingInfo(Place place, String contentId, String hours, String restDays, String phone,
+                              String openingPeriod, String usageFee, LocalDateTime collectedAt) {
         this.place = Objects.requireNonNull(place, "place");
         if (contentId == null || !contentId.matches("[0-9]{1,50}")) throw new IllegalArgumentException("잘못된 콘텐츠 ID");
         this.sourceContentId = contentId;
         this.operatingHours = nullableText(hours, 10000);
         this.restDays = nullableText(restDays, 10000);
         this.contactPhone = nullableText(phone, 100);
-        if (operatingHours == null && this.restDays == null && contactPhone == null)
+        this.openingPeriod = nullableText(openingPeriod, 10000);
+        this.usageFee = nullableText(usageFee, 10000);
+        if (operatingHours == null && this.restDays == null && contactPhone == null
+                && this.openingPeriod == null && this.usageFee == null)
             throw new IllegalArgumentException("수집한 운영 안내가 없습니다.");
         this.sourceUrl = "https://www.data.go.kr/data/15101578/openapi.do";
         this.collectedAt = Objects.requireNonNull(collectedAt, "collectedAt");

@@ -31,9 +31,11 @@ public class TourApiOperatingClient {
             String hours = text(item, "usetimeleports", 10000);
             String rest = text(item, "restdateleports", 10000);
             String phone = text(item, "infocenterleports", 100);
-            if (hours == null && rest == null && phone == null)
+            String openingPeriod = text(item, "openperiod", 10000);
+            String usageFee = text(item, "usefeeleports", 10000);
+            if (hours == null && rest == null && phone == null && openingPeriod == null && usageFee == null)
                 throw new TourApiException(TourApiException.Reason.NO_DATA);
-            return new TourOperatingSnapshot(contentId, hours, rest, phone);
+            return new TourOperatingSnapshot(contentId, hours, rest, phone, openingPeriod, usageFee);
         } catch (TourApiException exception) { throw exception; }
         catch (RuntimeException exception) { throw invalid(); }
     }

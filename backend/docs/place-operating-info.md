@@ -2,9 +2,9 @@
 
 ## 현재 범위
 
-한 장소의 이용시간·휴무일·문의전화를 TourAPI `detailIntro2`에서 수동 수집해 저장하고 상세에 표시한다. 새로운 상세의 `operatingInfo`는 **수집된 참고 안내**이며, 기존 `operationStatus`(운영 여부), 장소 검수일 및 `notices`(검수된 공지)를 대체하지 않는다. 다른 장소는 운영 안내를 임의로 생성하지 않고 null로 반환한다.
+한 장소의 이용시간·휴무일·문의전화·개장 기간·이용요금을 TourAPI `detailIntro2`에서 수동 수집해 저장하고 상세에 참고 안내로 표시한다. 개장 기간(`openperiod`)과 이용요금(`usefeeleports`)은 제공처의 안내 문구다. 장소의 `operationStatus`(운영 여부)는 별도로 관리하며 TourAPI에서 갱신하지 않는다.
 
-이번 단계는 최초 저장·표시까지다. 재수집한 값의 변경 비교, 변경 후보 이력, 운영자 반영·보류 화면, 스케줄러, 실시간 알림은 구현하지 않는다. 이미 저장된 운영 안내는 재실행해도 SKIPPED로 유지하며 검수·대조 정보를 덮어쓰지 않는다.
+최초 수집 명령을 다시 실행하면 이미 저장된 운영 안내는 SKIPPED로 처리한다. 기존 운영 안내는 아래 변경 후보 확인 명령으로 비교한다.
 
 ## 로컬 실행
 
@@ -25,13 +25,13 @@ set +a
 
 공식 안내와의 대조 기록은 `backend/scripts/review-flystation-operating-info.sql`을 로컬 DB에 별도로 실행한다. 2026-11-16에 확인한 값에 대한 기록이며 서버 시작이나 수집 명령이 자동 적용하지 않는다.
 
-플라이스테이션의 외부 콘텐츠 ID `2623831`만 호출한다. 외부 HTTP는 DB 트랜잭션·잠금 밖에서 실행한다. 기존 전송 계층의 공식 호스트 제한·리다이렉트 금지·타임아웃·응답 크기 제한·키가 포함된 예외 제거 정책을 재사용한다. 제공기관 성공 코드와 항목의 콘텐츠 ID·유형(28)을 확인하고 HTML을 일반 텍스트로 변환한다. 빈 항목은 null이며 세 항목이 모두 비었거나 길이 제한을 넘는 응답은 저장하지 않는다. 서버 시작과 CI에서는 외부 API를 호출하지 않는다.
+플라이스테이션의 외부 콘텐츠 ID `2623831`만 호출한다. 외부 HTTP는 DB 트랜잭션·잠금 밖에서 실행한다. 기존 전송 계층의 공식 호스트 제한·리다이렉트 금지·타임아웃·응답 크기 제한·키가 포함된 예외 제거 정책을 재사용한다. 제공기관 성공 코드와 항목의 콘텐츠 ID·유형(28)을 확인하고 HTML을 일반 텍스트로 변환한다. 빈 항목은 null이며 모든 항목이 비었거나 길이 제한을 넘는 응답은 저장하지 않는다. 서버 시작과 CI에서는 외부 API를 호출하지 않는다.
 
 V10은 `place_operating_info`를 추가한다. 장소 PK/FK와 TourAPI 수집 이력 FK로 최초 수집 장소에 연결하고, 수집 값과 수집일을 저장한다. HTTP 실패는 기존 데이터를 변경하지 않고, DB 저장 실패는 해당 트랜잭션을 롤백한다. 초기 수집은 UNVERIFIED이며 `verified_at`은 null이다. 기존 장소·사진 마이그레이션과 후기·관리자 API는 수정하지 않는다. 팀 ERD에 이 추가 테이블을 반영해야 한다.
 
 ## 운영 안내 변경 후보 확인
 
-공개 장소 중 이미 TourAPI 운영 안내가 저장된 장소를 대상으로, 기존 DB 값과 최신 `detailIntro2` 응답의 운영시간·휴무·문의처를 비교한다. 장소 ID 순으로 기본 20곳을 확인하며 한 번에 1~500곳을 지정할 수 있다. 비교 명령은 수집·공개 정보 저장과 분리돼 있고 별도 JSON 파일을 만든다.
+공개 장소 중 이미 TourAPI 운영 안내가 저장된 장소를 대상으로, 기존 DB 값과 최신 `detailIntro2` 응답의 이용시간·휴무일·문의전화·개장 기간·이용요금을 비교한다. 장소 ID 순으로 기본 20곳을 확인하며 한 번에 1~500곳을 지정할 수 있다. 비교 명령은 별도 JSON 파일을 만든다.
 
 Windows PowerShell에서 프로젝트 루트의 `.env`와 실행 중인 로컬 DB를 사용한다.
 
@@ -50,7 +50,7 @@ TOUR_OPERATING_REPORT_PATH=/tmp/outpick-operating-review.json TOUR_OPERATING_REP
 
 HTTP 429가 발생하면 후속 요청을 멈추고 그때까지의 결과를 저장한다. 다음 범위를 확인할 때는 새 출력 파일 이름을 사용하고 `lastCompletedPlaceId`를 PowerShell의 `-AfterPlaceId` 또는 환경 변수 `TOUR_OPERATING_REPORT_AFTER_ID`에 넣는다. 요청 실패는 보고서를 기록한 뒤 종료 코드 1을 반환하므로, 일반 실패 항목도 `issues`에서 확인한다. 운영자 승인 화면과 알림 연동은 이 보고서의 후속 작업이다.
 
-검수 후보를 DB에 보관하려면 백엔드 시작으로 Flyway V19를 적용한 뒤, 위 명령에 PowerShell `-SaveCandidates` 또는 macOS/Linux 환경 변수 `TOUR_OPERATING_REPORT_SAVE_CANDIDATES=true`를 추가한다. JSON은 먼저 기록하고 장소·항목별 후보를 `place_operating_change_candidate`에 저장한다.
+검수 후보를 DB에 보관하려면 백엔드 시작으로 Flyway V20까지 적용한 뒤, 위 명령에 PowerShell `-SaveCandidates` 또는 macOS/Linux 환경 변수 `TOUR_OPERATING_REPORT_SAVE_CANDIDATES=true`를 추가한다. JSON은 먼저 기록하고 장소·항목별 후보를 `place_operating_change_candidate`에 저장한다.
 
 아직 처리하지 않은 같은 이전 값·새 값 조합은 한 건으로 유지한다. 저장 직전에 공개 상태와 현재 값을 다시 확인해 비교 후 바뀐 후보는 건너뛴다. 실행 결과의 `saved`, `duplicate`, `stale`은 각각 저장·중복 제외·기준 변경으로 제외된 항목 수다. 웹 서버가 조회하는 운영 안내에는 후보를 적용하지 않는다.
 
@@ -61,6 +61,7 @@ HTTP 429가 발생하면 후속 요청을 멈추고 그때까지의 결과를 �
 `GET /api/v1/places/{placeId}`에 다음 필드를 가진 nullable `operatingInfo`가 추가됐다.
 
 - `operatingHours`, `restDays`, `contactPhone`: 수집한 참고 값. 제공되지 않은 개별 항목은 null이다.
+- `openingPeriod`, `usageFee`: 수집한 개장 기간·이용요금. 미제공 값은 null이며, 화면에서 `—`로 표시한다. 운영 여부가 비어 있을 때도 화면에서 `—`로 표시한다.
 - `sourceUrl`: 키가 포함되지 않은 공공데이터 서비스 안내 페이지.
 - `collectedAt`: 최초 수집 결과가 저장된 서울 시간. 최신성이 확인된 시각이 아니다.
 - `verificationStatus`: UNVERIFIED(미검수), NEEDS_REVIEW(확인 필요), VERIFIED(검수된 안내).

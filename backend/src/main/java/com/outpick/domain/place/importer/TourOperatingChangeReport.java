@@ -41,6 +41,8 @@ final class TourOperatingChangeReport {
                 compareField("operatingHours", previous.operatingHours(), next.operatingHours(), changes, missing);
                 compareField("restDays", previous.restDays(), next.restDays(), changes, missing);
                 compareField("contactPhone", previous.contactPhone(), next.contactPhone(), changes, missing);
+                compareField("openingPeriod", previous.openingPeriod(), next.openingPeriod(), changes, missing);
+                compareField("usageFee", previous.usageFee(), next.usageFee(), changes, missing);
                 if (!missing.isEmpty()) issues.add(issue(baseline, "MISSING_FIELDS", List.copyOf(missing)));
                 if (!changes.isEmpty()) {
                     candidates.add(new Candidate(baseline.placeId(), baseline.placeName(), previous.contentId(),

@@ -77,6 +77,26 @@ class TourOperatingCandidateStoreTests {
                 """, Long.class, changed, hidden)).isEmpty();
     }
 
+    @Test
+    @DisplayName("수집된 개장 기간과 이용요금의 변경 후보를 저장해도 공개 값은 유지한다")
+    void storesOpeningPeriodAndUsageFeeCandidatesWithoutApplyingThem() {
+        long placeId = placeWriter.save(new TourApiNormalizer()
+                .normalize(TourApiTests.target("304"), TourApiTests.place("304", "126.1", ""))).placeId();
+        jdbc.update("UPDATE place SET publish_status = ? WHERE place_id = ?", PlacePublishStatus.PUBLISHED.getCode(), placeId);
+        operatingWriter.saveInitial(new TourOperatingSnapshot("304", null, null, null, "12월~2월", "60,000원"));
+        var candidate = new TourOperatingChangeReport.Candidate(placeId, "테스트 시설", "304",
+                "https://example.com/previous", "https://www.data.go.kr/data/15101578/openapi.do",
+                List.of(new TourOperatingChangeReport.FieldChange("openingPeriod", "12월~2월", "12월~3월"),
+                        new TourOperatingChangeReport.FieldChange("usageFee", "60,000원", "65,000원")));
+
+        var store = new TourOperatingCandidateStore(jdbc, transactionManager);
+        assertThat(store.save(List.of(candidate))).isEqualTo(new TourOperatingCandidateStore.Summary(2, 0, 0));
+        assertThat(jdbc.queryForList("SELECT field_name FROM place_operating_change_candidate WHERE place_id = ?",
+                String.class, placeId)).containsExactlyInAnyOrder("openingPeriod", "usageFee");
+        assertThat(jdbc.queryForMap("SELECT opening_period, usage_fee FROM place_operating_info WHERE place_id = ?",
+                placeId)).containsEntry("opening_period", "12월~2월").containsEntry("usage_fee", "60,000원");
+    }
+
     private long publishedPlace(String contentId) {
         long id = placeWriter.save(new TourApiNormalizer()
                 .normalize(TourApiTests.target(contentId), TourApiTests.place(contentId, "126.1", ""))).placeId();

@@ -211,7 +211,8 @@ class PlaceDetailApiTests {
     void separatesCollectedOperatingInfoFromVerifiedPlaceDataAndKeepsQueryCountConstant() throws Exception {
         var source = persist(SourceRecord.builder().place(published).type("TOUR_API").originId("2623831").build());
         persist(new TourApiImportRecord("2623831", published.getId(), source.getId(), NOW.minusDays(2)));
-        persist(new PlaceOperatingInfo(published, "2623831", "평日 10:30", "월요일", "1855-3946", NOW));
+        persist(new PlaceOperatingInfo(published, "2623831", "평日 10:30", "월요일", "1855-3946",
+                "12월~2월", "성인 60,000원", NOW));
         em.flush();
         em.clear();
         var stats = em.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
@@ -221,6 +222,8 @@ class PlaceDetailApiTests {
                 .andExpect(jsonPath("$.operatingInfo.operatingHours").value("평日 10:30"))
                 .andExpect(jsonPath("$.operatingInfo.restDays").value("월요일"))
                 .andExpect(jsonPath("$.operatingInfo.contactPhone").value("1855-3946"))
+                .andExpect(jsonPath("$.operatingInfo.openingPeriod").value("12월~2월"))
+                .andExpect(jsonPath("$.operatingInfo.usageFee").value("성인 60,000원"))
                 .andExpect(jsonPath("$.operatingInfo.collectedAt").value("2026-11-13T12:00:00"))
                 .andExpect(jsonPath("$.operatingInfo.verificationStatus").value("UNVERIFIED"))
                 .andExpect(jsonPath("$.operatingInfo.verifiedAt").value(nullValue()))

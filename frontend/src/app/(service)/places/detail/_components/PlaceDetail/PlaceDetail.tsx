@@ -118,7 +118,7 @@ export default function PlaceDetail() {
                 <h2 className={sectionHeadingClassName} id="visit-information">방문 전 확인하세요</h2>
                 <dl className={placeFactsClassName}>
                   <div><dt>상세 주소</dt><dd>{place.address ?? '미확인'}</dd></div>
-                  <div><dt>현재 운영 여부</dt><dd>{place.operationStatus ?? '미확인'}</dd></div>
+                  <div><dt>현재 운영 여부</dt><dd>{place.operationStatus ?? '—'}</dd></div>
                   <div><dt>공식 홈페이지</dt><dd>{homepage ? <a href={homepage} target="_blank" rel="noopener noreferrer">공식 안내 열기 ↗</a> : '미등록'}</dd></div>
                 </dl>
                 {place.latitude !== null && place.longitude !== null && <a className={actionClassName} target="_blank" rel="noopener noreferrer" href={`https://map.kakao.com/link/to/${encodeURIComponent(place.name ?? '장소')},${place.latitude},${place.longitude}`}>카카오맵 길찾기 ↗</a>}

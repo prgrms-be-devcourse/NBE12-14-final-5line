@@ -29,7 +29,8 @@ public class PlaceDetailService {
         var image = place.getRepresentativeImage();
         var info = place.getOperatingInfo();
         var operatingInfo = info == null ? null : new PlaceOperatingInfoResponse(info.getOperatingHours(), info.getRestDays(),
-                info.getContactPhone(), info.getSourceUrl(), info.getCollectedAt(), info.getVerificationStatus().name(),
+                info.getContactPhone(), info.getOpeningPeriod(), info.getUsageFee(),
+                info.getSourceUrl(), info.getCollectedAt(), info.getVerificationStatus().name(),
                 info.getVerifiedAt(), info.getReviewNote(), info.getOfficialSourceUrl(), info.getComparedAt());
         var notices = repository.findActiveNotices(placeId, LocalDateTime.now(placeClock));
         var activeNoticeSourceIds = notices.stream().map(PlaceNoticeResponse::sourceRecordId).collect(Collectors.toSet());
