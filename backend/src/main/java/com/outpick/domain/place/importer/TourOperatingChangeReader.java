@@ -10,6 +10,14 @@ import java.util.List;
 class TourOperatingChangeReader {
     private final JdbcTemplate jdbc;
 
+    long findScheduledCursor() {
+        return jdbc.queryForObject("SELECT after_place_id FROM tour_operating_scan_progress WHERE scan_id = 1", Long.class);
+    }
+
+    void updateScheduledCursor(long afterPlaceId) {
+        jdbc.update("UPDATE tour_operating_scan_progress SET after_place_id = ? WHERE scan_id = 1", afterPlaceId);
+    }
+
     List<TourOperatingChangeReport.Baseline> findPublishedAfter(long afterPlaceId, int limit) {
         return jdbc.query("""
                 SELECT p.place_id, p.name, o.source_url, o.operating_hours, o.rest_days, o.contact_phone,

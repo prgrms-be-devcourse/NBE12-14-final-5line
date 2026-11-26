@@ -27,13 +27,22 @@ import org.testcontainers.mysql.MySQLContainer;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.web.context.HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
+@SpringBootTest(properties = {
+        "spring.jpa.hibernate.ddl-auto=validate",
+        "OUTPICK_TOUR_OPERATING_ENABLED=true",
+        "OUTPICK_TOUR_OPERATING_CRON=0 0 0 1 1 *",
+        "TOUR_API_KEY=test-key"
+})
 @AutoConfigureMockMvc
 @Testcontainers
 @Transactional
@@ -47,6 +56,8 @@ class AdminOperatingChangeApiTests {
     @Autowired MemberRepository members;
     @Autowired TourImportWriter placeWriter;
     @Autowired TourOperatingInfoWriter operatingWriter;
+    @Autowired TourOperatingChangeReader changeReader;
+    @Autowired TourOperatingCandidateStore candidateStore;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager em;
 
@@ -147,6 +158,33 @@ class AdminOperatingChangeApiTests {
                 """, candidateId)).containsEntry("decision", "REJECTED").containsEntry("resolution_reason", "공식 안내와 불일치");
         assertThat(jdbc.queryForObject("SELECT operating_hours FROM place_operating_info WHERE place_id = ?",
                 String.class, placeId)).isEqualTo("11:00");
+    }
+
+    @Test
+    @DisplayName("정기 비교는 변경 후보를 검수 목록에 등록하고 새 실행 객체도 DB 위치부터 재개한다")
+    void resumesFromTheStoredCursorAndMakesChangesVisibleToAdmins() throws Exception {
+        var admin = members.saveAndFlush(Member.createAdmin("scheduler@example.com", "운영자", "hash"));
+        long first = place("420", PlacePublishStatus.PUBLISHED);
+        place("421", PlacePublishStatus.PUBLISHED);
+        var client = mock(TourApiOperatingClient.class);
+        when(client.getOperatingInfo("420")).thenReturn(new TourOperatingSnapshot("420", "10:00", null, null));
+        when(client.getOperatingInfo("421")).thenReturn(new TourOperatingSnapshot("421", "09:00", null, null));
+
+        new TourOperatingComparisonScheduler(changeReader, candidateStore, client, 1).compareAndSave();
+        assertThat(changeReader.findScheduledCursor()).isEqualTo(first);
+        verify(client).getOperatingInfo("420");
+        verifyNoMoreInteractions(client);
+
+        new TourOperatingComparisonScheduler(changeReader, candidateStore, client, 1).compareAndSave();
+        verify(client).getOperatingInfo("421");
+        assertThat(changeReader.findScheduledCursor()).isZero();
+        mvc.perform(get(PATH).session(session(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.items[0].placeId").value(first))
+                .andExpect(jsonPath("$.items[0].candidates[0].newValue").value("10:00"));
+        assertThat(jdbc.queryForObject("SELECT operating_hours FROM place_operating_info WHERE place_id = ?", String.class,
+                first)).isEqualTo("09:00");
     }
 
     private long candidateId(long placeId) {

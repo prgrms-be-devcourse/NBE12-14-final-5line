@@ -14,6 +14,12 @@ spring:
       max-file-size: 5MB
       max-request-size: 6MB
 
+outpick:
+  tour-operating:
+    enabled: ${OUTPICK_TOUR_OPERATING_ENABLED:false}
+    cron: "${OUTPICK_TOUR_OPERATING_CRON:0 30 10 * * *}"
+    max-places: ${OUTPICK_TOUR_OPERATING_MAX_PLACES:500}
+
 logging:
   pattern:
     level: "%5p [requestId=%X{requestId:-}]"
