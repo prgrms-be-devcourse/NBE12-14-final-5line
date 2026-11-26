@@ -72,3 +72,12 @@ tasks.register<JavaExec>("importTourPlaces") {
 	systemProperty("spring.devtools.restart.enabled", "false")
 	javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
 }
+
+tasks.register<JavaExec>("comparePlaceOperatingInfo") {
+	group = "application"
+	description = "공개 장소의 운영 정보 변경 후보를 JSON에 저장합니다."
+	classpath = sourceSets.main.get().runtimeClasspath
+	mainClass = "com.outpick.domain.place.importer.TourOperatingChangeCommand"
+	systemProperty("spring.devtools.restart.enabled", "false")
+	javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
+}

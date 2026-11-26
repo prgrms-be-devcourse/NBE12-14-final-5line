@@ -1,4 +1,4 @@
-import { Bell, Bookmark, CircleUserRound, Flag, LayoutDashboard, MapPin, Megaphone, MessageSquareWarning } from 'lucide-react';
+import { Bell, Bookmark, CircleUserRound, ClipboardCheck, Flag, LayoutDashboard, MapPin, Megaphone, MessageSquareWarning } from 'lucide-react';
 
 export const commonNavigationItems = [
   { label: '마이페이지', href: '/mypage/', Icon: CircleUserRound },
@@ -19,6 +19,7 @@ export const memberNavigationItems = [
 export const adminNavigationItems = [
   { label: '운영 현황', href: '/admin/', Icon: LayoutDashboard },
   { label: '장소 관리', href: '/admin/places/', Icon: MapPin },
+  { label: '운영 정보 검수', href: '/admin/operating-changes/', Icon: ClipboardCheck },
   { label: '공지 관리', href: '/admin/notices/', Icon: Megaphone },
   { label: '오류 제보', href: '/admin/place-reports/', Icon: Flag },
   { label: '후기 신고', href: '/admin/review-reports/', Icon: MessageSquareWarning },

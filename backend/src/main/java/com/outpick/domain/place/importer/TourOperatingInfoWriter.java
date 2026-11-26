@@ -24,7 +24,8 @@ public class TourOperatingInfoWriter {
         if (em.find(PlaceOperatingInfo.class, imported.getPlaceId()) != null) return "SKIPPED";
         var place = em.find(Place.class, imported.getPlaceId());
         em.persist(new PlaceOperatingInfo(place, snapshot.contentId(), snapshot.operatingHours(), snapshot.restDays(),
-                snapshot.contactPhone(), LocalDateTime.now(placeClock).withNano(0)));
+                snapshot.contactPhone(), snapshot.openingPeriod(), snapshot.usageFee(),
+                LocalDateTime.now(placeClock).withNano(0)));
         em.flush();
         return "CREATED";
     }

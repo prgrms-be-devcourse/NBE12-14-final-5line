@@ -72,6 +72,7 @@ describe('공통 사이드바', () => {
   it.each([
     ['/admin/', '운영 현황'],
     ['/admin/places', '장소 관리'],
+    ['/admin/operating-changes/', '운영 정보 검수'],
     ['/admin/notices/', '공지 관리'],
     ['/admin/place-reports/', '오류 제보'],
     ['/admin/review-reports/', '후기 신고'],
@@ -86,7 +87,7 @@ describe('공통 사이드바', () => {
     expect(screen.queryByText('공통 메뉴')).toBeNull();
     expect(screen.queryByText('관리자 메뉴')).toBeNull();
     expect(commonMenu.getAllByRole('link').map(link => link.textContent)).toEqual(['마이페이지']);
-    expect(menu.getAllByRole('link').map(link => link.textContent)).toEqual(['운영 현황', '장소 관리', '공지 관리', '오류 제보', '후기 신고']);
+    expect(menu.getAllByRole('link').map(link => link.textContent)).toEqual(['운영 현황', '장소 관리', '운영 정보 검수', '공지 관리', '오류 제보', '후기 신고']);
     expect(screen.getAllByRole('link', { current: 'page' })).toEqual([screen.getByRole('link', { name: label })]);
   });
 });

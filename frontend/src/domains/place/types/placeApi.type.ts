@@ -19,6 +19,8 @@ export type PlaceOperatingInfoData = {
   operatingHours: string | null;
   restDays: string | null;
   contactPhone: string | null;
+  openingPeriod?: string | null;
+  usageFee?: string | null;
   sourceUrl: string;
   collectedAt: string;
   verificationStatus: 'UNVERIFIED' | 'NEEDS_REVIEW' | 'VERIFIED';

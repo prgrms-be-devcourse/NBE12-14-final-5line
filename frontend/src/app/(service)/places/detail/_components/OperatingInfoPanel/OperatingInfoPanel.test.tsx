@@ -29,6 +29,10 @@ describe('수집된 운영 안내', () => {
     expect(screen.getByText(/아직 수집된 운영 안내가 없습니다/)).toBeTruthy();
     view.rerender(<OperatingInfoPanel info={{ ...info, operatingHours: null, restDays: null }} />);
     expect(screen.getAllByText('제공된 정보 없음')).toHaveLength(2);
+    expect(screen.getAllByText('—')).toHaveLength(2);
+    view.rerender(<OperatingInfoPanel info={{ ...info, openingPeriod: '12월~2월', usageFee: '성인 60,000원' }} />);
+    expect(screen.getByText('12월~2월')).toBeTruthy();
+    expect(screen.getByText('성인 60,000원')).toBeTruthy();
   });
 
   it('실제 검수일이 있을 때에만 검수된 안내로 표시한다', () => {

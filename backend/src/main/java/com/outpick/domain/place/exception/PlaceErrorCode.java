@@ -7,6 +7,11 @@ import org.springframework.http.HttpStatus;
 @Getter
 public enum PlaceErrorCode {
     PLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "장소를 찾을 수 없습니다."),
+    OPERATING_CHANGE_NOT_FOUND(HttpStatus.NOT_FOUND, "검수 후보를 찾을 수 없습니다."),
+    OPERATING_CHANGE_ALREADY_RESOLVED(HttpStatus.CONFLICT, "이미 처리한 검수 후보입니다."),
+    OPERATING_CHANGE_STALE(HttpStatus.CONFLICT, "현재 공개 값이 검수 후보의 이전 값과 다릅니다. 반려한 뒤 최신 정보를 다시 수집해 주세요."),
+    OPERATING_CHANGE_NOT_PUBLIC(HttpStatus.CONFLICT, "공개된 장소의 변경만 승인할 수 있습니다."),
+    OPERATING_CHANGE_REJECTION_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "반려 사유를 입력해 주세요."),
     PLACE_NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 장소에서 공지를 찾을 수 없습니다."),
     PLACE_NOTICE_NOT_DRAFT(HttpStatus.CONFLICT, "초안 상태의 공지만 수정할 수 있습니다."),
     PLACE_NOTICE_INVALID_SOURCE(HttpStatus.BAD_REQUEST, "해당 장소에서 공지에 연결할 출처를 찾을 수 없습니다."),
