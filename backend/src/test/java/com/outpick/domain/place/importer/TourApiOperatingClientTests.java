@@ -14,6 +14,20 @@ class TourApiOperatingClientTests {
     }
 
     @Test
+    @DisplayName("명시적인 결과 0건과 모든 운영 항목 미제공을 정상 미제공으로 분류한다")
+    void reportsNoDataForSuccessfulEmptyResults() {
+        var emptyResults = """
+                {"response":{"header":{"resultCode":"0000"},"body":{"totalCount":0,"items":""}}}
+                """;
+        var allFieldsMissing = response(Map.of("contentid", "1", "contenttypeid", "28"), true);
+        for (String body : List.of(emptyResults, allFieldsMissing)) {
+            assertThatThrownBy(() -> new TourApiOperatingClient(id -> body).getOperatingInfo("1"))
+                    .isInstanceOfSatisfying(TourApiException.class, error ->
+                            assertThat(error.getReason()).isEqualTo(TourApiException.Reason.NO_DATA));
+        }
+    }
+
+    @Test
     @DisplayName("객체와 배열 응답을 읽고 운영 안내 HTML을 일반 텍스트로 변환한다")
     void readsBothItemShapesAndConvertsHtmlToText() {
         for (boolean array : List.of(true, false)) {
@@ -38,8 +52,7 @@ class TourApiOperatingClientTests {
     @Test
     @DisplayName("비어 있거나 대상 시설과 유형이 다른 응답을 원문 노출 없이 거절한다")
     void rejectsEmptyWrongFacilityAndWrongTypeWithoutLeakingResponse() {
-        for (var item : List.of(Map.of("contentid", "1", "contenttypeid", "28"),
-                Map.of("contentid", "2", "contenttypeid", "28", "infocenterleports", "secret"),
+        for (var item : List.of(Map.of("contentid", "2", "contenttypeid", "28", "infocenterleports", "secret"),
                 Map.of("contentid", "1", "contenttypeid", "32", "infocenterleports", "secret"))) {
             assertThatThrownBy(() -> new TourApiOperatingClient(id -> response(item, true)).getOperatingInfo("1"))
                     .isInstanceOf(TourApiException.class).hasNoCause().hasMessageNotContaining("secret");

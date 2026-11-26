@@ -1,4 +1,9 @@
-param([ValidateSet('importTourPlaces', 'importPlaceOperatingInfo')][string]$Task = 'importTourPlaces')
+param(
+    [ValidateSet('importTourPlaces', 'importPlaceOperatingInfo', 'comparePlaceOperatingInfo')][string]$Task = 'importTourPlaces',
+    [string]$ReportPath,
+    [ValidateRange(1, 500)][int]$Limit = 20,
+    [ValidateRange(0, [long]::MaxValue)][long]$AfterPlaceId = 0
+)
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $envFile = Join-Path $projectRoot '.env'
@@ -21,6 +26,12 @@ foreach ($name in @('TOUR_API_KEY', 'MYSQL_DATABASE', 'MYSQL_PASSWORD')) {
     if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name, 'Process'))) {
         throw ".env에 $name 값을 설정해 주세요."
     }
+}
+if ($Task -eq 'comparePlaceOperatingInfo') {
+    if ([string]::IsNullOrWhiteSpace($ReportPath)) { throw '새 보고서 파일 경로를 -ReportPath로 지정해 주세요.' }
+    $env:TOUR_OPERATING_REPORT_PATH = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ReportPath)
+    $env:TOUR_OPERATING_REPORT_LIMIT = "$Limit"
+    $env:TOUR_OPERATING_REPORT_AFTER_ID = "$AfterPlaceId"
 }
 & (Join-Path $projectRoot 'backend/gradlew.bat') -p (Join-Path $projectRoot 'backend') $Task --no-daemon
 exit $LASTEXITCODE

@@ -29,6 +29,27 @@ set +a
 
 V10은 `place_operating_info`를 추가한다. 장소 PK/FK와 TourAPI 수집 이력 FK로 최초 수집 장소에 연결하고, 수집 값과 수집일을 저장한다. HTTP 실패는 기존 데이터를 변경하지 않고, DB 저장 실패는 해당 트랜잭션을 롤백한다. 초기 수집은 UNVERIFIED이며 `verified_at`은 null이다. 기존 장소·사진 마이그레이션과 후기·관리자 API는 수정하지 않는다. 팀 ERD에 이 추가 테이블을 반영해야 한다.
 
+## 운영 안내 변경 후보 확인
+
+공개 장소 중 이미 TourAPI 운영 안내가 저장된 장소를 대상으로, 기존 DB 값과 최신 `detailIntro2` 응답의 운영시간·휴무·문의처를 비교한다. 장소 ID 순으로 기본 20곳을 확인하며 한 번에 1~500곳을 지정할 수 있다. 비교 명령은 수집·공개 정보 저장과 분리돼 있고 별도 JSON 파일을 만든다.
+
+Windows PowerShell에서 프로젝트 루트의 `.env`와 실행 중인 로컬 DB를 사용한다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ./backend/scripts/import-tourapi.ps1 -Task comparePlaceOperatingInfo -ReportPath "$env:TEMP/outpick-operating-review.json" -Limit 20
+```
+
+macOS 또는 Linux에서는 기존 DB 환경 변수와 TourAPI 키를 설정한 다음 실행한다.
+
+```bash
+TOUR_OPERATING_REPORT_PATH=/tmp/outpick-operating-review.json TOUR_OPERATING_REPORT_LIMIT=20 \
+  ./backend/gradlew -p backend comparePlaceOperatingInfo --no-daemon
+```
+
+보고서에는 확인 대상 수, 실제 요청 수, 변경 후보와 오류 내역이 들어간다. 검수자는 `candidates`에서 장소와 변경 항목의 이전 값·새 값·출처를 확인한다. 공백과 줄바꿈만 다른 값은 같은 값으로 처리한다. 기존 값이 있는데 새 응답에서 항목이 빠지면 `MISSING_FIELDS`, 제공자가 정상 응답했지만 운영 항목이 비어 있으면 `NO_DATA`로 남긴다. 둘 다 삭제 후보로 올리지 않는다.
+
+HTTP 429가 발생하면 후속 요청을 멈추고 그때까지의 결과를 저장한다. 다음 범위를 확인할 때는 새 출력 파일 이름을 사용하고 `lastCompletedPlaceId`를 PowerShell의 `-AfterPlaceId` 또는 환경 변수 `TOUR_OPERATING_REPORT_AFTER_ID`에 넣는다. 요청 실패는 보고서를 기록한 뒤 종료 코드 1을 반환하므로, 일반 실패 항목도 `issues`에서 확인한다. 운영자 승인 화면과 알림 연동은 이 보고서의 후속 작업이다.
+
 ## 상세 API와 화면
 
 `GET /api/v1/places/{placeId}`에 다음 필드를 가진 nullable `operatingInfo`가 추가됐다.

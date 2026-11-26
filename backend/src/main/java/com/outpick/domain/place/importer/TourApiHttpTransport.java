@@ -45,6 +45,7 @@ public class TourApiHttpTransport implements TourApiTransport, TourIntroTranspor
             var request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(15)).GET().build();
             var response = client.send(request, HttpResponse.BodyHandlers.limiting(
                     HttpResponse.BodyHandlers.ofByteArray(), MAX_BODY_BYTES));
+            if (response.statusCode() == 429) throw new TourApiException(TourApiException.Reason.RATE_LIMIT);
             if (response.statusCode() != 200) throw new TourApiException(TourApiException.Reason.REQUEST_FAILED);
             return new String(response.body(), StandardCharsets.UTF_8);
         } catch (TourApiException exception) {
