@@ -29,6 +29,18 @@ class LoginAttemptLimiterTests {
         assertThatCode(() -> limiter.requireAllowed(key)).doesNotThrowAnyException();
     }
 
+    @Test
+    @DisplayName("같은 이메일이어도 접속 주소가 다르면 로그인 실패 횟수를 공유하지 않는다")
+    void limitsAreSeparateForDifferentClientAddresses() {
+        var limiter = new LoginAttemptLimiter(new AdjustableClock(), 5, 15);
+        String first = limiter.key("user@example.com", "198.51.100.10");
+        String second = limiter.key("user@example.com", "198.51.100.20");
+        for (int i = 0; i < 5; i++) limiter.recordFailure(first);
+
+        assertThatThrownBy(() -> limiter.requireAllowed(first)).isInstanceOf(BusinessException.class);
+        assertThatCode(() -> limiter.requireAllowed(second)).doesNotThrowAnyException();
+    }
+
     private static final class AdjustableClock extends Clock {
         private Instant now = Instant.parse("2026-01-01T00:00:00Z");
 

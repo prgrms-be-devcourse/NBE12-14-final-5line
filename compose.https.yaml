@@ -3,7 +3,6 @@ services:
   backend:
     environment:
       AUTH_COOKIE_SECURE: "true"
-      SERVER_FORWARDHEADERSSTRATEGY: native
   nginx:
     ports:
       - "443:443"

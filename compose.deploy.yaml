@@ -32,6 +32,7 @@ services:
       MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER in .env}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
       AUTH_JWT_SECRET_BASE64: ${AUTH_JWT_SECRET_BASE64:?Set a base64-encoded 32-byte JWT secret in .env}
+      SERVER_FORWARDHEADERSSTRATEGY: native
     ports:
       - "127.0.0.1:18080:8080"
 
