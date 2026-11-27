@@ -6,8 +6,9 @@ const units: Record<string, string> = { PERSON: '1인', VEHICLE: '차량', EQUIP
 const days: Record<string, string> = { WEEKDAY: '평일', WEEKEND: '주말', HOLIDAY: '공휴일' };
 const ages: Record<string, string> = { ADULT: '성인', YOUTH: '청소년', CHILD: '어린이' };
 
-export default function PlaceVerifiedPricePanel({ prices }: { prices: VerifiedPlacePrice[] }) {
-  return <section aria-labelledby="verified-prices-heading" className="border-t border-[#e9edf3] py-7">
+export default function PlaceVerifiedPricePanel({ prices, hideEmpty = false }: { prices: VerifiedPlacePrice[]; hideEmpty?: boolean }) {
+  if (hideEmpty && prices.length === 0) return null;
+  return <section aria-labelledby="verified-prices-heading" className="my-5 rounded-2xl border border-[#e9edf3] p-5 sm:p-6">
     <h2 id="verified-prices-heading" className="mb-3 text-[18px] font-bold">확인된 정상 이용요금</h2>
     {prices.length === 0 ? <p className="text-[13px] text-[#718096]">검증된 현재 요금이 없습니다. 가격 미확인은 무료를 뜻하지 않습니다.</p> :
       <ul className="space-y-3">{prices.map((price, index) => {

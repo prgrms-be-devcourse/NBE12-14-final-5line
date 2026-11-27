@@ -40,3 +40,15 @@ describe('수집된 운영 안내', () => {
     expect(screen.getByText('2026-11-17 09:00:00')).toBeTruthy();
   });
 });
+
+describe('해수욕장 요금 표시', () => {
+  it('요금이 없으면 요금 행을 숨기고 운영시간은 유지한다', () => {
+    render(<OperatingInfoPanel info={{ ...info, feeInfo: null }} hideMissingFee />);
+    expect(screen.queryByText('이용요금')).toBeNull();
+    expect(screen.getByText('매주 월요일')).toBeTruthy();
+  });
+  it('등록된 주차·편의시설 요금은 해수욕장에서도 표시한다', () => {
+    render(<OperatingInfoPanel info={{ ...info, feeInfo: '주차 3,000원' }} hideMissingFee />);
+    expect(screen.getByText('주차 3,000원')).toBeTruthy();
+  });
+});

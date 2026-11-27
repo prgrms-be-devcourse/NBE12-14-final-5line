@@ -31,12 +31,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/places")
 @RequiredArgsConstructor
 public class PlaceController {
+    private final com.outpick.domain.place.service.PlaceResearchDetailsService researchDetailsService;
     private final PlaceSearchService searchService;
     private final PlaceDetailService detailService;
     private final PlaceFilterService filterService;
     private final PlaceVerifiedDetailsService verifiedDetailsService;
     private final SnorkelingSafetyService snorkelingSafetyService;
     private final FisheryProtectionService fisheryProtectionService;
+
+    @GetMapping("/{placeId}/research-details")
+    public java.util.List<com.outpick.domain.place.service.PlaceResearchDetailsService.Evidence> researchDetails(@PathVariable @Positive long placeId) {
+        return researchDetailsService.get(placeId);
+    }
 
     @GetMapping("/filters")
     @Operation(summary = "장소 검색 필터 선택지", description = "최상위 지역 ID와 분류별 종목 ID를 반환합니다.")

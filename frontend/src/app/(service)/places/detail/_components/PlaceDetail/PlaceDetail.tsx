@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import ResearchEvidencePanel from '../ResearchEvidencePanel';
 import { useSearchParams } from 'next/navigation';
 import { useEffect } from 'react';
 import PlacePhoto, { PlacePhotoCredit, getPlacePhoto } from '@/domains/place/components/PlacePhoto/PlacePhoto';
@@ -12,7 +13,7 @@ import { ApiError } from '@/shared/lib/http/apiError';
 import { getListReturnUrl, scrollToPlaceNotice } from '@/domains/place/lib/placeNavigation';
 import PlaceReviews from '@/domains/review/components/PlaceReviews/PlaceReviews';
 import FavoritePlaceButton from '../FavoritePlaceButton';
-import OperatingInfoPanel, { placeFactsClassName } from '../OperatingInfoPanel/OperatingInfoPanel';
+import { placeFactsClassName } from '../OperatingInfoPanel/OperatingInfoPanel';
 import FisheryProtectionPanel from '../FisheryProtectionPanel/FisheryProtectionPanel';
 import PlaceVerifiedPricePanel from '../PlaceVerifiedPricePanel/PlaceVerifiedPricePanel';
 import PlaceActivityDetailsPanel from '../PlaceActivityDetailsPanel/PlaceActivityDetailsPanel';
@@ -23,7 +24,7 @@ const actionClassName = 'mt-5 block rounded-lg bg-[#5147ff] p-3 text-center text
 const emptyClassName = 'py-[70px] text-center md:px-5 md:py-[100px]';
 const emptyTitleClassName = 'mt-5 text-[26px] font-bold';
 const emptyTextClassName = 'mt-4 text-[13px] text-[#718096]';
-const sectionClassName = 'border-t border-[#e9edf3] py-7 [&>p]:mt-2.5 [&>p]:text-[13px]/[1.9] [&>p]:text-[#718096]';
+const sectionClassName = 'my-5 rounded-2xl border border-[#e9edf3] p-5 sm:p-6 [&>p]:mt-2.5 [&>p]:text-[13px]/[1.9] [&>p]:text-[#718096]';
 const sectionHeadingClassName = 'mb-[18px] text-[18px] font-bold';
 
 export default function PlaceDetail() {
@@ -38,6 +39,7 @@ export default function PlaceDetail() {
   const homepage = safeHttpUrl(place?.homepage ?? null);
   const returnUrl = getListReturnUrl(params.get('returnTo'));
   const search = params.toString();
+  const isBeach = place?.activities.some(activity => activity.activityTypeName === "해수욕장") ?? false;
 
   useEffect(() => {
     if (!place?.notices) return;
@@ -49,7 +51,7 @@ export default function PlaceDetail() {
 
   return (
     <div className="[&_a:focus-visible]:outline-3 [&_a:focus-visible]:outline-offset-4 [&_a:focus-visible]:outline-[#5147ff]">
-      <main className="m-auto max-w-[1160px] p-5 md:px-9 md:py-7">
+      <main className="m-auto max-w-[1440px] p-5 md:px-9 md:py-7">
         <Link className="inline-block py-2 text-[13px] text-[#6156cc] no-underline" href={returnUrl} scroll={false}>← 장소 목록으로 돌아가기</Link>
         {missing ? (
           <section className={emptyClassName}>
@@ -63,20 +65,21 @@ export default function PlaceDetail() {
           <>
             <p className="mt-5 rounded-lg bg-[#f5f4ff] px-4 py-3 text-xs/[1.8] text-[#716a9b]">{place.name?.startsWith('[데모]') ? '개발용 가상 장소 · 실제 시설·주소·운영 정보가 아닙니다.' : '방문 전 공식 안내를 확인하세요. 미확인 항목은 미확인으로 표시합니다.'}</p>
             <div className="mt-7 mb-8 grid grid-cols-1 items-center gap-[26px] md:mb-10 md:grid-cols-2 md:gap-9">
-              <div>
-                <p className={eyebrowClassName}>EXPLORE THE OUTSIDE</p>
+              <div className="md:col-start-2 md:row-start-1">
+                <nav aria-label="경로 탐색" className="flex flex-wrap items-center gap-2 text-xs text-slate-500"><Link href="/">홈</Link><span aria-hidden="true">›</span><Link href="/explore/">탐색</Link>{place.activities[0] && <><span aria-hidden="true">›</span><Link href={`/explore/?category=${encodeURIComponent(place.activities[0].activityTypeName)}`}>{place.activities[0].activityTypeName}</Link></>}</nav>
                 <p className="mt-4 text-[13px] text-[#7c899d] md:mt-6">{place.address ?? '주소 미확인'}</p>
                 <h1 className="mt-2.5 text-[30px] font-extrabold tracking-[-1.5px] md:text-[clamp(28px,3vw,42px)]">{place.name ?? '이름 미확인'}</h1>
-                <p className="mt-4 text-sm/[1.8] text-[#718096]">{place.description ?? '등록된 소개가 없습니다.'}</p>
+                <p className="mt-4 line-clamp-4 text-sm/[1.8] text-[#718096]">{place.description ?? '등록된 소개가 없습니다.'}</p>
                 <div className="mt-6 flex flex-wrap gap-[7px]">{place.activities.map(activity => <span key={activity.placeActivityId} className="rounded-md bg-[#f3f2ff] px-2.5 py-1.5 text-[12px] text-[#6156cc]">{activity.activityTypeName}</span>)}</div>
                 <div className="mt-5 flex flex-wrap items-start gap-2">
                   <FavoritePlaceButton placeId={place.id} />
                   <CopyPlaceLinkButton label="장소 링크 복사" path={`/places/detail/?id=${place.id}`} />
                 </div>
               </div>
-              <div className="row-start-1 min-w-0 [&>div]:rounded-[18px] md:row-start-auto"><PlacePhoto place={place} /><PlacePhotoCredit place={place} /></div>
+              <div className="row-start-1 min-w-0 [&>div]:rounded-[18px] md:row-start-1 md:col-start-1"><PlacePhoto place={place} /><PlacePhotoCredit place={place} /></div>
             </div>
 
+            <nav aria-label="상세 정보 메뉴" className="mb-7 flex gap-6 overflow-x-auto border-b border-slate-200 bg-white py-4 text-sm font-semibold whitespace-nowrap text-[#5942FF] [&>a]:rounded-md [&>a]:px-2 [&>a]:py-2 [&>a:hover]:bg-[#F3F0FF] [&>a:focus-visible]:outline-2"><a href="#place-introduction">기본정보</a>{!isBeach && <a href="#research-evidence">이용요금</a>}<a href="#research-evidence">운영정보</a><a href="#place-reviews-title">후기</a></nav>
             <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[minmax(0,1fr)_minmax(250px,.55fr)] md:gap-[60px]">
               <div>
                 <section className={sectionClassName} aria-labelledby="place-introduction">
@@ -104,11 +107,8 @@ export default function PlaceDetail() {
                     phoneVerified={place.operatingInfo?.verificationStatus === "VERIFIED"} />}
                 <PlaceActivityDetailsPanel activities={place.activities.map(activity => activity.activityTypeName)}
                   facts={place.verifiedDetails?.activityDetails ?? {}} operating={place.verifiedDetails?.operating ?? {}} />
-                <PlaceVerifiedPricePanel prices={place.verifiedDetails?.prices ?? []} />
-                <section className={sectionClassName} aria-labelledby="place-operating-info">
-                  <h2 className={sectionHeadingClassName} id="place-operating-info">운영 정보</h2>
-                  <OperatingInfoPanel info={place.operatingInfo} />
-                </section>
+                <PlaceVerifiedPricePanel prices={place.verifiedDetails?.prices ?? []} hideEmpty={isBeach} />
+                <ResearchEvidencePanel placeId={place.id} hideEmpty={isBeach} operatingInfo={place.operatingInfo} />
                 <section className={sectionClassName} aria-labelledby="place-notices">
                   <h2 className={sectionHeadingClassName} id="place-notices">운영 공지</h2>
                   {place.notices.length ? place.notices.map(notice => (
@@ -133,11 +133,12 @@ export default function PlaceDetail() {
                 <h2 className={sectionHeadingClassName} id="visit-information">방문 전 확인하세요</h2>
                 <dl className={placeFactsClassName}>
                   <div><dt>상세 주소</dt><dd>{place.address ?? '미확인'}</dd></div>
-                  <div><dt>현재 운영 여부</dt><dd>{place.operationStatus ?? '미확인'}</dd></div>
+                  <div><dt>현재 운영 여부</dt><dd>{place.operationStatus === 'UNVERIFIED' ? '운영 여부 미확인' : place.operationStatus ?? '미확인'}</dd></div>
                   <div><dt>공식 홈페이지</dt><dd>{homepage ? <a href={homepage} target="_blank" rel="noopener noreferrer">공식 안내 열기 ↗</a> : '미등록'}</dd></div>
                 </dl>
                 {place.latitude !== null && place.longitude !== null && <a className={actionClassName} target="_blank" rel="noopener noreferrer" href={`https://map.kakao.com/link/to/${encodeURIComponent(place.name ?? '장소')},${place.latitude},${place.longitude}`}>카카오맵 길찾기 ↗</a>}
                 <p className="mt-[22px] text-[11px]/[1.8] text-[#8793a7]">{place.name?.startsWith('[데모]') ? '방문 전 공식 안내를 확인하세요. [데모] 장소의 좌표와 주소는 실제 시설 위치가 아닙니다.' : '방문 전 운영시간과 이용 조건을 공식 안내에서 확인하세요.'}</p>
+                <a href="tel:119" className="mt-4 block rounded-lg bg-red-50 p-3 text-center text-sm font-semibold text-red-600">긴급 신고 119</a>
                 <Link href={returnUrl} scroll={false} className={actionClassName}>다른 장소 살펴보기</Link>
               </aside>
             </div>
