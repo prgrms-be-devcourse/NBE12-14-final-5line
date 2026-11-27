@@ -1,5 +1,5 @@
 import { apiClient } from '@/shared/lib/http/apiClient';
-import type { PlaceCatalog, PlaceDetailData, PlacePage, PlaceSelection } from '../types/placeApi.type';
+import type { PlaceCatalog, PlaceDetailData, PlacePage, PlaceSelection, SnorkelingSafetyData, FisheryProtectionData } from '../types/placeApi.type';
 import type { PlaceMapBounds } from '../types/kakaoMap.type';
 
 export const seasonCodes: Record<string, string> = { 봄: 'SPRING', 여름: 'SUMMER', 가을: 'AUTUMN', 겨울: 'WINTER' };
@@ -41,4 +41,13 @@ export async function searchPlaces(
 
 export async function getPlaceDetail(id: number, signal?: AbortSignal): Promise<PlaceDetailData> {
   return (await apiClient.get<PlaceDetailData>(`/api/v1/places/${id}`, { signal })).data;
+}
+
+export async function getSnorkelingSafety(id: number, signal?: AbortSignal): Promise<SnorkelingSafetyData> {
+  return (await apiClient.get<SnorkelingSafetyData>(`/api/v1/places/${id}/snorkeling-safety`, { signal })).data;
+}
+
+export async function getFisheryProtection(id: number, visitDate: string, signal?: AbortSignal): Promise<FisheryProtectionData> {
+  return (await apiClient.get<FisheryProtectionData>(`/api/v1/places/${id}/fishery-protection`,
+    { params: { visitDate }, signal })).data;
 }

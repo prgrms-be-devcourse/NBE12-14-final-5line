@@ -5,7 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { expect, it } from 'vitest';
+import { beforeEach, expect, it } from 'vitest';
 import { getQueryClient } from '@/shared/lib/query/queryClient';
 import { server } from '../../../../../tests/mocks/server';
 import type { AdminPlace, AdminPlaceDetail } from '../../types/adminPlace.type';
@@ -22,6 +22,11 @@ const sharedDetail = {
 const regions = http.get(`${api}/places/filters`, () => HttpResponse.json({
   regions: [{ id: 3, name: '강원특별자치도' }], categories: [],
 }));
+
+beforeEach(() => server.use(
+  http.get(`${api}/admin/place-candidates/snorkeling`, () => HttpResponse.json({ items: [], page: 0, size: 20, totalElements: 0 })),
+  http.get(`${api}/admin/places/:placeId/evidence`, () => HttpResponse.json({ prices: [], facts: [] })),
+));
 
 function renderPlaces() {
   const user = userEvent.setup();
@@ -92,7 +97,7 @@ it('장소 초안을 저장하면 목록을 갱신하고 종목과 출처가 비
     http.get(`${placesUrl}/10`, () => HttpResponse.json({ ...manualPlace, ...sharedDetail }))
   );
   const user = renderPlaces();
-  await screen.findByText('검수 전 장소가 없어요.');
+  await screen.findByText('해당 상태의 장소가 없어요.');
   const form = within(screen.getByRole('form', { name: '새 장소' }));
   await user.type(form.getByRole('textbox', { name: '장소명' }), manualPlace.name ?? '');
   await user.type(form.getByRole('textbox', { name: '주소' }), manualPlace.address ?? '');
@@ -103,7 +108,23 @@ it('장소 초안을 저장하면 목록을 갱신하고 종목과 출처가 비
 
   await screen.findByText('장소 #10을 비공개 초안으로 저장했어요.');
   await user.click(await screen.findByRole('button', { name: /수동 등록 장소/ }));
-  await screen.findByText(sharedDetail.description);
+  expect((await screen.findAllByText(sharedDetail.description)).length).toBeGreaterThan(0);
   expect(screen.getByText('등록된 종목이 없어요.')).toBeTruthy();
   expect(screen.getByText('등록된 출처가 없어요.')).toBeTruthy();
+});
+
+it('스노클링 후보를 입수 미확인 검수 대기로 표시하고 공개 추천으로 안내하지 않는다', async () => {
+  server.use(
+    regions,
+    http.get(placesUrl, () => HttpResponse.json({ items: [], page: 0, size: 20, totalElements: 0 })),
+    http.get(`${api}/admin/place-candidates/snorkeling`, () => HttpResponse.json({
+      items: [{ candidateId: 'candidate-1', facilityName: '검수 대기 해변', reviewStatus: 'PENDING',
+        recommendable: false, existingPlaceId: null }], page: 0, size: 20, totalElements: 1,
+    })),
+  );
+  renderPlaces();
+  const review = within(screen.getByRole('region', { name: '스노클링 조사 후보' }));
+  expect(await review.findByText('검수 대기 해변')).toBeTruthy();
+  expect(review.getByText('입수 미확인 · 검수 대기')).toBeTruthy();
+  expect(review.getByText(/공개 추천에 표시되지 않습니다/)).toBeTruthy();
 });

@@ -56,11 +56,14 @@ class PlaceSearchApiTests {
         province = persist(Region.builder().name("강원").build());
         district = persist(Region.builder().name("평창").parent(province).build());
         var otherRegion = persist(Region.builder().name("경기").build());
-        var category = persist(ActivityCategory.builder().name("테스트 분류").build());
+        var category = persist(ActivityCategory.builder().name("스키").build());
         ski = persist(ActivityType.builder().category(category).name("스키").build());
-        board = persist(ActivityType.builder().category(category).name("보드").build());
-        surf = persist(ActivityType.builder().category(category).name("서핑").build());
-        var climb = persist(ActivityType.builder().category(category).name("클라이밍").build());
+        var sledCategory = persist(ActivityCategory.builder().name("눈썰매").build());
+        var waterCategory = persist(ActivityCategory.builder().name("워터파크").build());
+        var iceCategory = persist(ActivityCategory.builder().name("아이스스케이팅").build());
+        board = persist(ActivityType.builder().category(sledCategory).name("눈썰매").build());
+        surf = persist(ActivityType.builder().category(waterCategory).name("워터파크").build());
+        var climb = persist(ActivityType.builder().category(iceCategory).name("아이스스케이팅").build());
         first = place("동일이름", district, "37.37", "128.39", PlacePublishStatus.PUBLISHED);
         activity(first, ski, "OUTDOOR", "WINTER");
         activity(first, board, "OUTDOOR", "WINTER");
@@ -71,7 +74,7 @@ class PlaceSearchApiTests {
                 .latitude(new BigDecimal("38")).longitude(new BigDecimal("129"))
                 .publishStatus(PlacePublishStatus.PUBLISHED).build());
         activity(literal, ski, "OUTDOOR", "WINTER");
-        place("경기 장소", otherRegion, null, null, PlacePublishStatus.PUBLISHED);
+        activity(place("경기 장소", otherRegion, null, null, PlacePublishStatus.PUBLISHED), climb, "OUTDOOR", "SUMMER");
         place("검수 전 장소", district, "37.37", "128.39", PlacePublishStatus.DRAFT);
         place("숨긴 장소", district, "37.37", "128.39", PlacePublishStatus.HIDDEN);
         em.flush();

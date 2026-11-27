@@ -8,7 +8,7 @@ import AdminPlaceDetail from './AdminPlaceDetail';
 
 export default function AdminPlaceReview() {
   const [search, setSearch] = useState('');
-  const [filters, setFilters] = useState({ query: '', page: 0 });
+  const [filters, setFilters] = useState<{ query: string; page: number; status: 'DRAFT' | 'PUBLISHED' | 'HIDDEN' }>({ query: '', page: 0, status: 'DRAFT' });
   const [placeId, setPlaceId] = useState<number | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const places = useQuery(adminDraftPlacesQuery(filters));
@@ -17,7 +17,7 @@ export default function AdminPlaceReview() {
 
   function searchPlaces(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setFilters({ query: search.trim(), page: 0 });
+    setFilters(previous => ({ ...previous, query: search.trim(), page: 0 }));
   }
 
   function changePage(page: number) {
@@ -33,10 +33,17 @@ export default function AdminPlaceReview() {
   return (
     <section className={placePanel} aria-labelledby="draft-places-heading">
       <h2 id="draft-places-heading" ref={headingRef} tabIndex={-1} className="text-base font-bold">
-        검수 전 장소
+        {filters.status === 'DRAFT' ? '검수 전 장소' : filters.status === 'PUBLISHED' ? '공개 장소' : '비공개 장소'}
       </h2>
       {placeId === null ? (
         <>
+          <label className="mt-3 block text-sm font-medium">공개 상태
+            <select aria-label="공개 상태" className={`${placeField} mt-1`} value={filters.status}
+              onChange={event => { setPlaceId(null); setFilters(previous => ({ ...previous,
+                status: event.target.value as 'DRAFT' | 'PUBLISHED' | 'HIDDEN', page: 0 })); }}>
+              <option value="DRAFT">검수 전</option><option value="PUBLISHED">공개</option><option value="HIDDEN">비공개</option>
+            </select>
+          </label>
           <form onSubmit={searchPlaces} role="search" aria-label="검수 전 장소 검색"
             className="mt-3 flex flex-wrap items-end gap-2">
             <label className="flex min-w-0 flex-1 basis-44 flex-col gap-1 text-sm font-medium">
@@ -60,7 +67,7 @@ export default function AdminPlaceReview() {
             <>
               {result.items.length === 0 ? (
                 <p className="mt-4 text-sm text-slate-600">
-                  {filters.query ? '검색 조건에 맞는 검수 전 장소가 없어요.' : '검수 전 장소가 없어요.'}
+                  {filters.query ? '검색 조건에 맞는 장소가 없어요.' : '해당 상태의 장소가 없어요.'}
                 </p>
               ) : (
                 <ul className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">

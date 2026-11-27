@@ -79,4 +79,23 @@ describe('DB 장소 상세 화면',()=>{
   it.each(['','?id=999oops','?id=0','?id=1&id=2'])('잘못된 ID는 요청 없이 안내한다: %s',query=>{
     window.history.replaceState(null,'','/places/detail/'+query); mount(); expect(screen.getByRole('heading',{name:'장소를 찾을 수 없어요'})).toBeTruthy();
   });
+  it('스노클링 입수 상태가 미확인이면 추천하지 않고 공통 주의사항을 구분해 보여 준다', async () => {
+    server.use(
+      http.get(base + '/1', () => HttpResponse.json({ ...body,
+        activities: [{ placeActivityId: 11, activityTypeId: 21, activityTypeName: '스노클링',
+          environmentType: 'OUTDOOR', seasons: ['SUMMER'] }],
+        verifiedDetails: { prices: [], activityDetails: {}, operating: {} },
+      })),
+      http.get(base + '/1/snorkeling-safety', () => HttpResponse.json({
+        placeId: 1, siteType: 'UNKNOWN', entryStatus: 'UNKNOWN', recommendable: false,
+        verifiedSafetyDetails: null, commonPrecautions: ['구명조끼 착용 권장'],
+        confirmedWarnings: [], sourceUrl: null, checkedAt: null, verifiedAt: null,
+      }))
+    );
+    mount();
+    expect(await screen.findByText('입수 가능 여부 미확인')).toBeTruthy();
+    expect(screen.getByText(/현재 스노클링 방문 추천 대상이 아닙니다/)).toBeTruthy();
+    expect(screen.getByText(/공통 안전 수칙이며/)).toBeTruthy();
+    expect(screen.getByText(/가격 미확인은 무료를 뜻하지 않습니다/)).toBeTruthy();
+  });
 });

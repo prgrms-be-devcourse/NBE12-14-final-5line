@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { environmentLabel, seasonLabel } from '@/domains/place/api/placeApi';
 import { adminPlaceDetailQuery } from '../../queries/adminPlacesQuery';
 import { placeSecondaryButton } from '../adminPlaceStyles';
+import AdminPlaceControls from './AdminPlaceControls';
+import AdminPlaceEvidence from './AdminPlaceEvidence';
 
 function focusHeading(heading: HTMLHeadingElement | null) {
   heading?.focus();
@@ -36,6 +38,7 @@ export default function AdminPlaceDetail({ placeId }: { placeId: number }) {
             {place.nameAlias && <><dt className="font-semibold">별칭</dt><dd>{place.nameAlias}</dd></>}
             {place.homepage && <><dt className="font-semibold">홈페이지</dt><dd>{place.homepage}</dd></>}
           </dl>
+          <AdminPlaceControls key={place.id} place={place} />
           <section>
             <h4 className="mb-2 text-sm font-bold">종목</h4>
             {place.activities.length === 0 ? <p className="text-sm text-slate-600">등록된 종목이 없어요.</p> : (
@@ -63,6 +66,7 @@ export default function AdminPlaceDetail({ placeId }: { placeId: number }) {
               </ul>
             )}
           </section>
+          <AdminPlaceEvidence placeId={place.id} />
         </>
       )}
     </div>

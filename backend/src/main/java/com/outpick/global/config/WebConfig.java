@@ -37,7 +37,7 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addMapping(API_PREFIX + "/**")
                 .allowedOrigins(corsProperties.allowedOrigins().toArray(String[]::new))
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                .allowedHeaders("Content-Type", "Authorization", "X-CSRF-TOKEN")
+                .allowedHeaders("Content-Type", "Authorization", "X-CSRF-TOKEN", "X-XSRF-TOKEN")
                 .allowCredentials(true);
     }
 }

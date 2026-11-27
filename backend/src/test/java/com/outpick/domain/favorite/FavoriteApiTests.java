@@ -3,6 +3,9 @@ package com.outpick.domain.favorite;
 import com.jayway.jsonpath.JsonPath;
 import com.outpick.domain.member.AuthTestClient;
 import com.outpick.domain.place.entity.Place;
+import com.outpick.domain.place.entity.ActivityCategory;
+import com.outpick.domain.place.entity.ActivityType;
+import com.outpick.domain.place.entity.PlaceActivity;
 import com.outpick.domain.place.entity.PlacePublishStatus;
 import com.outpick.domain.place.entity.PlaceRepresentativeImage;
 import com.outpick.domain.place.entity.Region;
@@ -364,6 +367,11 @@ class FavoriteApiTests {
             var place = Place.builder().region(region).name("관심 장소")
                     .publishStatus(PlacePublishStatus.PUBLISHED).build();
             entityManager.persist(place);
+            var category = ActivityCategory.builder().name("스키").build();
+            entityManager.persist(category);
+            var type = ActivityType.builder().category(category).name("스키").build();
+            entityManager.persist(type);
+            entityManager.persist(PlaceActivity.builder().place(place).activityType(type).environmentType("OUTDOOR").build());
             return place.getId();
         });
     }

@@ -21,14 +21,17 @@ import java.util.stream.Collectors;
 public class PlaceDetailService {
     private final PlaceDetailRepository repository;
     private final Clock placeClock;
+    private final PlaceCanonicalResolver canonicalResolver;
+    private final PlaceVerifiedDetailsService verifiedDetailsService;
 
     public PlaceDetailResponse getDetail(long placeId) {
+        placeId = canonicalResolver.resolve(placeId);
         var place = repository.findPublishedPlace(placeId)
                 .orElseThrow(() -> new BusinessException(PlaceErrorCode.PLACE_NOT_FOUND.getErrorCode()));
         var activities = repository.findActivityResponses(placeId);
         var image = place.getRepresentativeImage();
         var info = place.getOperatingInfo();
-        var operatingInfo = info == null ? null : new PlaceOperatingInfoResponse(info.getOperatingHours(), info.getRestDays(),
+        var operatingInfo = info == null ? null : new PlaceOperatingInfoResponse(info.getOperatingHours(), info.getRestDays(), info.getFeeInfo(),
                 info.getContactPhone(), info.getSourceUrl(), info.getCollectedAt(), info.getVerificationStatus().name(),
                 info.getVerifiedAt(), info.getReviewNote(), info.getOfficialSourceUrl(), info.getComparedAt());
         var notices = repository.findActiveNotices(placeId, LocalDateTime.now(placeClock));
@@ -42,6 +45,6 @@ public class PlaceDetailService {
                 place.getReviewedAt(), image == null ? null : image.getUrl(),
                 image == null ? null : image.getAttribution(), image == null ? null : image.getSourceUrl(),
                 image == null ? null : image.getLicenseType(), activities,
-                notices, sources, operatingInfo);
+                notices, sources, operatingInfo, verifiedDetailsService.getForPublished(placeId));
     }
 }

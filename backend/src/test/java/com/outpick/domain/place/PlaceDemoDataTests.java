@@ -42,9 +42,9 @@ class PlaceDemoDataTests {
         mvc.perform(get("/api/v1/places/filters"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.regions[*].name", containsInAnyOrder("강원", "경기")))
-                .andExpect(jsonPath("$.categories[*].name", containsInAnyOrder("수상", "산악", "항공", "스키·보드", "체험", "실내")))
-                .andExpect(jsonPath("$.categories[3].activityTypeIds.length()").value(2));
+                .andExpect(jsonPath("$.categories[*].name", containsInAnyOrder("아이스스케이팅", "해수욕장", "스노클링", "워터파크", "루지·레일바이크·중력 레이싱", "스키", "눈썰매")))
+                .andExpect(jsonPath("$.categories[?(@.name == '스키')].activityTypeIds[0]").exists());
         mvc.perform(get("/api/v1/places"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(6));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(4));
     }
 }

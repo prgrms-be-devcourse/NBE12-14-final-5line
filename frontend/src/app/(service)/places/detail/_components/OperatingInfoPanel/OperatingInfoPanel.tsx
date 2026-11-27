@@ -14,6 +14,7 @@ export default function OperatingInfoPanel({ info }: { info?: PlaceOperatingInfo
     <dl className={placeFactsClassName}>
       <div><dt>이용시간</dt><dd className="wrap-anywhere whitespace-pre-line">{info.operatingHours ?? '제공된 정보 없음'}</dd></div>
       <div><dt>휴무일</dt><dd className="wrap-anywhere whitespace-pre-line">{info.restDays ?? '제공된 정보 없음'}</dd></div>
+      <div><dt>이용요금</dt><dd className="wrap-anywhere whitespace-pre-line">{info.feeInfo ?? '제공된 정보 없음'}</dd></div>
       <div><dt>문의전화</dt><dd>{info.contactPhone ?? '제공된 정보 없음'}</dd></div>
       <div><dt>수집일</dt><dd>{info.collectedAt.replace('T', ' ')} (한국 시간)</dd></div>
       <div><dt>검수일</dt><dd>{verified ? info.verifiedAt!.replace('T', ' ') : '검수 완료 전'}</dd></div>

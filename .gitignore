@@ -17,3 +17,11 @@ letsencrypt-backup*.tar.gz
 ### AI Agents ###
 agents
 AGENTS.md
+
+# Local database backups and generated collection artifacts
+/outpick-backup.sql
+/data-collection/raw/
+/data-collection/processed/
+/data-collection/reports/
+/data-collection/review/
+/data-collection/.vendor/

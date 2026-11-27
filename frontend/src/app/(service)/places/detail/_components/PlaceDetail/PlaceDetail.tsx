@@ -13,6 +13,10 @@ import { getListReturnUrl, scrollToPlaceNotice } from '@/domains/place/lib/place
 import PlaceReviews from '@/domains/review/components/PlaceReviews/PlaceReviews';
 import FavoritePlaceButton from '../FavoritePlaceButton';
 import OperatingInfoPanel, { placeFactsClassName } from '../OperatingInfoPanel/OperatingInfoPanel';
+import FisheryProtectionPanel from '../FisheryProtectionPanel/FisheryProtectionPanel';
+import PlaceVerifiedPricePanel from '../PlaceVerifiedPricePanel/PlaceVerifiedPricePanel';
+import PlaceActivityDetailsPanel from '../PlaceActivityDetailsPanel/PlaceActivityDetailsPanel';
+import SnorkelingSafetyPanel from '../SnorkelingSafetyPanel/SnorkelingSafetyPanel';
 
 const eyebrowClassName = 'text-[10px] font-extrabold tracking-[1.7px] text-[#6156ff]';
 const actionClassName = 'mt-5 block rounded-lg bg-[#5147ff] p-3 text-center text-[12px] text-white no-underline';
@@ -90,6 +94,17 @@ export default function PlaceDetail() {
                   {place.activities.length === 0 && <p>등록된 활동 정보가 없습니다.</p>}
                   <p>시즌은 활동을 찾기 위한 분류입니다. 현재 운영 여부와 방문 가능한 날짜는 공식 안내를 확인하세요.</p>
                 </section>
+                {place.activities.some(activity => activity.activityTypeName === '스노클링') &&
+                  <SnorkelingSafetyPanel placeId={place.id}
+                    activityDetails={place.verifiedDetails?.activityDetails ?? {}} />}
+                {place.activities.some(activity => activity.activityTypeName === "스노클링") &&
+                  <FisheryProtectionPanel placeId={place.id} name={place.name} address={place.address}
+                    latitude={place.latitude} longitude={place.longitude}
+                    managementPhone={place.operatingInfo?.contactPhone ?? null}
+                    phoneVerified={place.operatingInfo?.verificationStatus === "VERIFIED"} />}
+                <PlaceActivityDetailsPanel activities={place.activities.map(activity => activity.activityTypeName)}
+                  facts={place.verifiedDetails?.activityDetails ?? {}} operating={place.verifiedDetails?.operating ?? {}} />
+                <PlaceVerifiedPricePanel prices={place.verifiedDetails?.prices ?? []} />
                 <section className={sectionClassName} aria-labelledby="place-operating-info">
                   <h2 className={sectionHeadingClassName} id="place-operating-info">운영 정보</h2>
                   <OperatingInfoPanel info={place.operatingInfo} />

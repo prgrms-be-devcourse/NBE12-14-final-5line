@@ -3,6 +3,8 @@ package com.outpick.domain.place.service;
 import com.outpick.domain.member.entity.MemberRole;
 import com.outpick.domain.member.service.MemberService;
 import com.outpick.domain.place.dto.AdminPlaceDetailResponse;
+import com.outpick.domain.place.dto.AdminPlaceCandidateResponse;
+import com.outpick.domain.place.dto.AdminPlaceUpdateRequest;
 import com.outpick.domain.place.dto.AdminPlaceNoticePageResponse;
 import com.outpick.domain.place.dto.AdminPlaceNoticeRequest;
 import com.outpick.domain.place.dto.AdminPlaceNoticeResponse;
@@ -31,6 +33,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +52,7 @@ public class AdminPlaceService {
     private final PlaceChangeEventRepository changeEvents;
     private final Clock placeClock;
     private final PlaceDetailRepository details;
+    private final JdbcTemplate jdbc;
 
     public Map<String, Long> summary(long memberId) {
         requireAdmin(memberId);
@@ -70,11 +74,24 @@ public class AdminPlaceService {
                 result.getTotalElements());
     }
 
+    public AdminPlaceCandidateResponse snorkelingCandidates(long memberId, int page, int size) {
+        requireAdmin(memberId);
+        long total = jdbc.queryForObject("SELECT COUNT(*) FROM place_import_candidate WHERE category_name='스노클링'", Long.class);
+        var items = jdbc.query("""
+                SELECT candidate_id, facility_name, review_status, recommendable, place_id
+                FROM place_import_candidate WHERE category_name='스노클링'
+                ORDER BY facility_name, candidate_id LIMIT ? OFFSET ?
+                """, (rs, row) -> new AdminPlaceCandidateResponse.Item(
+                rs.getString("candidate_id"), rs.getString("facility_name"), rs.getString("review_status"),
+                rs.getBoolean("recommendable"), (Long) rs.getObject("place_id")), size, Math.multiplyExact(page, size));
+        return new AdminPlaceCandidateResponse(items, page, size, total);
+    }
+
     public AdminPlaceDetailResponse place(long memberId, long placeId) {
         requireAdmin(memberId);
         var place = places.findById(placeId)
                 .orElseThrow(() -> new BusinessException(PlaceErrorCode.PLACE_NOT_FOUND.getErrorCode()));
-        return AdminPlaceDetailResponse.from(place, details.findActivityResponses(placeId), details.findSources(placeId));
+        return AdminPlaceDetailResponse.from(place, details.findAdminActivityResponses(placeId), details.findSources(placeId));
     }
 
     @Transactional
@@ -87,6 +104,32 @@ public class AdminPlaceService {
                 .latitude(request.latitude()).longitude(request.longitude())
                 .publishStatus(PlacePublishStatus.DRAFT).build();
         return AdminPlaceResponse.from(places.save(place));
+    }
+
+    @Transactional
+    public AdminPlaceResponse updatePlace(long memberId, long placeId, AdminPlaceUpdateRequest request) {
+        requireAdmin(memberId);
+        var place = places.findById(placeId).orElseThrow(() ->
+                new BusinessException(PlaceErrorCode.PLACE_NOT_FOUND.getErrorCode()));
+        place.updateBasicInfo(request.name().strip(), request.description() == null ? null : request.description().strip(),
+                request.address().strip());
+        return AdminPlaceResponse.from(place);
+    }
+
+    @Transactional
+    public AdminPlaceResponse changePlaceVisibility(long memberId, long placeId, PlacePublishStatus status) {
+        requireAdmin(memberId);
+        var place = places.findById(placeId).orElseThrow(() ->
+                new BusinessException(PlaceErrorCode.PLACE_NOT_FOUND.getErrorCode()));
+        if (status == PlacePublishStatus.PUBLISHED) {
+            boolean hasVerifiedSource = details.findSources(placeId).stream()
+                    .anyMatch(source -> source.verifiedAt() != null);
+            boolean hasPublicActivity = !details.findActivityResponses(placeId).isEmpty();
+            if (!hasVerifiedSource || !hasPublicActivity) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "검증된 출처와 공개 종목이 있어야 장소를 공개할 수 있습니다.");
+        }
+        place.changePublishStatus(status);
+        return AdminPlaceResponse.from(place);
     }
 
     public AdminPlaceNoticePageResponse notices(long memberId, long placeId, int page, int size) {

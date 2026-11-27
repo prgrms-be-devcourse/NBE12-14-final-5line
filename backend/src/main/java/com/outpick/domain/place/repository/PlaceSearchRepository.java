@@ -14,6 +14,11 @@ import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.util.Map;
+import java.util.HashMap;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
@@ -23,6 +28,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PlaceSearchRepository {
     private final EntityManager entityManager;
+    private final NamedParameterJdbcTemplate jdbc;
+    private final Clock placeClock;
 
     public PlacePageResponse search(PlaceSearchRequest request) {
         var cb = entityManager.getCriteriaBuilder();
@@ -35,9 +42,11 @@ public class PlaceSearchRepository {
         query.where(predicates(request, cb, query, place));
         var nameOrder = "name-desc".equals(request.sort()) ? cb.desc(place.get("name")) : cb.asc(place.get("name"));
         query.orderBy(nameOrder, cb.asc(place.get("id")));
-        var items = entityManager.createQuery(query)
+        var pageItems = entityManager.createQuery(query)
                 .setFirstResult(Math.multiplyExact(request.page(), request.size()))
                 .setMaxResults(request.size()).getResultList();
+        var previews = pricePreviews(pageItems);
+        var items = pageItems.stream().map(item -> item.withPricePreview(previews.get(item.id()))).toList();
 
         var countQuery = cb.createQuery(Long.class);
         var countedPlace = countQuery.from(Place.class);
@@ -47,6 +56,33 @@ public class PlaceSearchRepository {
         return new PlacePageResponse(items, request.page(), request.size(), total);
     }
 
+
+    /** Show only a verified, current, general admission price; never use rental or child-only prices as a minimum. */
+    private Map<Long, String> pricePreviews(List<PlaceSummaryResponse> items) {
+        if (items.isEmpty()) return Map.of();
+        var ids = items.stream().map(PlaceSummaryResponse::id).toList();
+        LocalDate today = LocalDate.now(placeClock);
+        Map<Long, String> result = new HashMap<>();
+        jdbc.query("""
+                SELECT place_id, MIN(amount_krw) AS amount,
+                       MAX(CASE WHEN free_of_charge=1 THEN 1 ELSE 0 END) AS free
+                FROM place_price
+                WHERE place_id IN (:ids) AND verification_status='VERIFIED' AND verified_at IS NOT NULL
+                  AND price_basis='NORMAL' AND price_kind='ADMISSION'
+                  AND age_band IS NULL AND day_type IS NULL AND season_label IS NULL
+                  AND duration_minutes IS NULL AND use_count IS NULL AND passenger_count IS NULL
+                  AND residency_condition IS NULL AND (mandatory_extra_cost IS NULL OR mandatory_extra_cost=0)
+                  AND (valid_from IS NULL OR valid_from<=:today)
+                  AND (valid_until IS NULL OR valid_until>=:today)
+                GROUP BY place_id
+                """, Map.of("ids", ids, "today", today), rs -> {
+                    long id = rs.getLong("place_id");
+                    Integer amount = (Integer) rs.getObject("amount");
+                    if (rs.getInt("free") == 1 && amount != null && amount == 0) result.put(id, "무료");
+                    else if (amount != null && amount > 0) result.put(id, "기본 입장료 " + String.format("%,d", amount) + "원");
+                });
+        return result;
+    }
     private Predicate[] predicates(PlaceSearchRequest request, CriteriaBuilder cb, AbstractQuery<?> query, Root<Place> place) {
         List<Predicate> predicates = new ArrayList<>();
         predicates.add(cb.equal(place.get("publishStatus"), PlacePublishStatus.PUBLISHED));
@@ -64,11 +100,15 @@ public class PlaceSearchRepository {
             predicates.add(cb.between(place.get("latitude"), request.south(), request.north()));
             predicates.add(cb.between(place.get("longitude"), request.west(), request.east()));
         }
-        if (!request.activityTypeIds().isEmpty() || request.season() != null || request.environmentType() != null) {
+        {
             var activityQuery = query.subquery(Integer.class);
             var activity = activityQuery.from(PlaceActivity.class);
             List<Predicate> conditions = new ArrayList<>();
             conditions.add(cb.equal(activity.get("place"), place));
+            conditions.add(activity.get("activityType").get("category").get("name")
+                    .in(com.outpick.domain.place.service.PlaceFilterService.PUBLIC_CATEGORIES));
+            conditions.add(activity.get("activityType").get("name")
+                    .in(com.outpick.domain.place.service.PlaceFilterService.PUBLIC_ACTIVITY_TYPES));
             if (!request.activityTypeIds().isEmpty()) conditions.add(activity.get("activityType").get("id").in(request.activityTypeIds()));
             if (request.environmentType() != null) conditions.add(cb.equal(activity.get("environmentType"), request.environmentType()));
             if (request.season() != null) {

@@ -87,6 +87,119 @@ class AdminPlaceApiTests {
     @Autowired JdbcTemplate jdbc;
 
     @Test
+    @DisplayName("스노클링 입수 미확인 후보는 운영자에게만 검수 대기로 표시한다")
+    void snorkelingCandidatesAreAdminOnly() throws Exception {
+        jdbc.update("""
+                INSERT INTO place_import_candidate(candidate_id, category_name, facility_name,
+                    review_status, recommendable, raw_evidence)
+                VALUES ('snorkeling-admin-test', '스노클링', '검수 대기 해변', 'PENDING', false, '{}')
+                """);
+        mvc.perform(get("/api/v1/admin/place-candidates/snorkeling"))
+                .andExpect(status().isUnauthorized());
+        var admin = login("admin@example.com", "12341234");
+        mvc.perform(get("/api/v1/admin/place-candidates/snorkeling").cookie(admin.cookies()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.items[0].facilityName").value("검수 대기 해변"))
+                .andExpect(jsonPath("$.items[0].reviewStatus").value("PENDING"))
+                .andExpect(jsonPath("$.items[0].recommendable").value(false));
+    }
+
+    @Test
+    @DisplayName("가격 검증에는 출처와 확인일이 필요하고 검증 전 가격은 공개되지 않는다")
+    void evidenceReviewRequiresSource() throws Exception {
+        var region = regions.saveAndFlush(Region.builder().code("EVIDENCE-REGION").name("검수 지역").build());
+        var place = places.saveAndFlush(Place.builder().region(region).name("검수 장소")
+                .publishStatus(PlacePublishStatus.PUBLISHED).build());
+        jdbc.update("""
+                INSERT INTO place_price(place_id,price_kind,price_basis,amount_krw,source_kind,verification_status)
+                VALUES (?,'ADMISSION','NORMAL',12000,'TOUR_API','NEEDS_REVIEW')
+                """,place.getId());
+        long priceId=jdbc.queryForObject("SELECT MAX(price_id) FROM place_price WHERE place_id=?",Long.class,place.getId());
+        var admin=login("admin@example.com","12341234");
+        mvc.perform(get("/api/v1/admin/places/{id}/evidence",place.getId()).cookie(admin.cookies()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.prices[0].status").value("NEEDS_REVIEW"));
+        mvc.perform(patch("/api/v1/admin/places/{id}/prices/{priceId}/review",place.getId(),priceId)
+                .cookie(admin.cookies()).header(admin.header(),admin.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"VERIFIED\"}"))
+                .andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("SELECT verification_status FROM place_price WHERE price_id=?",String.class,priceId))
+                .isEqualTo("NEEDS_REVIEW");
+        jdbc.update("UPDATE place_price SET source_url='https://example.com/price',checked_at='2026-11-24 09:00:00' WHERE price_id=?",priceId);
+        mvc.perform(patch("/api/v1/admin/places/{id}/prices/{priceId}/review",place.getId(),priceId)
+                .cookie(admin.cookies()).header(admin.header(),admin.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"VERIFIED\"}"))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/v1/admin/places/{id}/evidence",place.getId()).cookie(admin.cookies()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.prices[0].status").value("VERIFIED"));
+    }
+
+    @Test
+    @DisplayName("입수 허용 사실은 공식 출처와 적용 기간 없이는 검증할 수 없다")
+    void snorkelingPermissionNeedsOfficialValidity() throws Exception {
+        var region=regions.saveAndFlush(Region.builder().code("SAFETY-REGION").name("안전 검수 지역").build());
+        var place=places.saveAndFlush(Place.builder().region(region).name("안전 검수 장소").build());
+        jdbc.update("""
+                INSERT INTO place_detail_fact(place_id,field_key,value_json,source_kind,source_url,checked_at)
+                VALUES (?,'snorkelingSafety','{"entryStatus":"ALLOWED"}','TOUR_API',
+                        'https://example.com/safety','2026-11-24 09:00:00')
+                """,place.getId());
+        long factId=jdbc.queryForObject("SELECT MAX(fact_id) FROM place_detail_fact WHERE place_id=?",Long.class,place.getId());
+        var admin=login("admin@example.com","12341234");
+        mvc.perform(patch("/api/v1/admin/places/{id}/facts/{factId}/review",place.getId(),factId)
+                .cookie(admin.cookies()).header(admin.header(),admin.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"VERIFIED\"}"))
+                .andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("SELECT verification_status FROM place_detail_fact WHERE fact_id=?",String.class,factId))
+                .isEqualTo("NEEDS_REVIEW");
+    }
+
+    @Test
+    @DisplayName("가격과 안전정보를 추가하면 공개되지 않는 검수 후보로 저장한다")
+    void adminCreatesEvidenceAsPending() throws Exception {
+        var region=regions.saveAndFlush(Region.builder().code("DRAFT-EVIDENCE").name("후보 지역").build());
+        var place=places.saveAndFlush(Place.builder().region(region).name("후보 장소").build());
+        var admin=login("admin@example.com","12341234");
+        mvc.perform(post("/api/v1/admin/places/{id}/prices",place.getId()).cookie(admin.cookies())
+                .header(admin.header(),admin.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"priceKind":"ADMISSION","ticketName":"종일권","amountKrw":12000,
+                         "freeOfCharge":false,"sourceKind":"OFFICIAL_WEBSITE",
+                         "sourceUrl":"https://example.com/price","checkedAt":"2026-11-24T09:00:00"}
+                        """))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/api/v1/admin/places/{id}/facts",place.getId()).cookie(admin.cookies())
+                .header(admin.header(),admin.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"fieldKey":"snorkelingSafety","valueJson":"{\\\"entryStatus\\\":\\\"UNKNOWN\\\"}",
+                         "sourceKind":"OFFICIAL_WEBSITE","sourceUrl":"https://example.com/safety",
+                         "checkedAt":"2026-11-24T09:00:00"}
+                        """))
+                .andExpect(status().isCreated());
+        mvc.perform(get("/api/v1/admin/places/{id}/evidence",place.getId()).cookie(admin.cookies()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.prices[0].status").value("NEEDS_REVIEW"))
+                .andExpect(jsonPath("$.facts[0].status").value("NEEDS_REVIEW"));
+    }
+
+    @Test
+    @DisplayName("운영자는 장소 정보를 수정할 수 있고 검증 근거가 없는 장소는 공개할 수 없다")
+    void adminEditsPlaceButCannotPublishWithoutEvidence() throws Exception {
+        var region=regions.saveAndFlush(Region.builder().code("EDIT-REGION").name("수정 지역").build());
+        var place=places.saveAndFlush(Place.builder().region(region).name("수정 전").build());
+        var admin=login("admin@example.com","12341234");
+        mvc.perform(patch("/api/v1/admin/places/{id}",place.getId()).cookie(admin.cookies())
+                .header(admin.header(),admin.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"수정 후\",\"address\":\"확인한 주소\",\"description\":\"소개\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("수정 후"));
+        mvc.perform(patch("/api/v1/admin/places/{id}/visibility",place.getId()).cookie(admin.cookies())
+                .header(admin.header(),admin.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"PUBLISHED\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/places/{id}",place.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
     @DisplayName("운영자가 등록한 장소 초안은 운영자 상세에서만 조회할 수 있다")
     void adminCreatesPrivateDraft() throws Exception {
         long regionId = regions.saveAndFlush(Region.builder().code("ADMIN-TEST").name("관리자 테스트 지역").build()).getId();
@@ -630,8 +743,15 @@ class AdminPlaceApiTests {
 
     private Place publishedPlace(String name) {
         var region = regions.save(Region.builder().name("공지 테스트 지역").build());
-        return places.saveAndFlush(Place.builder().region(region).name(name)
+        var place = places.saveAndFlush(Place.builder().region(region).name(name)
                 .publishStatus(PlacePublishStatus.PUBLISHED).build());
+        var category = ActivityCategory.builder().name("스키").build();
+        entityManager.persist(category);
+        var type = ActivityType.builder().category(category).name("스키").build();
+        entityManager.persist(type);
+        entityManager.persist(PlaceActivity.builder().place(place).activityType(type).environmentType("OUTDOOR").build());
+        entityManager.flush();
+        return place;
     }
 
     private SourceRecord sourceFor(Place place) {

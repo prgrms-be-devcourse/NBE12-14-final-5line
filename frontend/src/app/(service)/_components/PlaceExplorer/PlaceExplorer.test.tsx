@@ -39,7 +39,7 @@ vi.mock('next/navigation', async () => {
     return () => window.removeEventListener('popstate', listener);
   }
   return {
-    usePathname: () => window.location.pathname,
+    usePathname: () => "/explore/",
     useSearchParams: () => new URLSearchParams(useSyncExternalStore(subscribe, () => window.location.search, () => '')),
   };
 });

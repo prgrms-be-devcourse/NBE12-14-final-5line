@@ -3,7 +3,7 @@ import { getAdminPlaceDetail, getDraftPlaces } from '../api/adminApi';
 
 export const adminDraftPlacesKey = ['admin', 'places', 'drafts'];
 
-export function adminDraftPlacesQuery(filters: { page: number; query: string }) {
+export function adminDraftPlacesQuery(filters: { page: number; query: string; status?: 'DRAFT' | 'PUBLISHED' | 'HIDDEN' }) {
   return queryOptions({
     queryKey: [...adminDraftPlacesKey, filters],
     queryFn: ({ signal }) => getDraftPlaces(filters, signal),

@@ -1,0 +1,82 @@
+[
+  {
+    "id": "db:546",
+    "name": "갤러리 구루지",
+    "categories": [
+      "루지·레일바이크·중력 레이싱"
+    ],
+    "reason": "CATEGORY_MISMATCH",
+    "action": "REMOVE_CATEGORY_ONLY"
+  },
+  {
+    "id": "db:554",
+    "name": "카페다루지",
+    "categories": [
+      "루지·레일바이크·중력 레이싱"
+    ],
+    "reason": "CATEGORY_MISMATCH",
+    "action": "REMOVE_CATEGORY_ONLY"
+  },
+  {
+    "id": "db:672",
+    "name": "남원워터월드수상스키장",
+    "categories": [
+      "스키"
+    ],
+    "reason": "CATEGORY_MISMATCH",
+    "action": "REMOVE_CATEGORY_ONLY"
+  },
+  {
+    "id": "db:673",
+    "name": "남한강수상스키장",
+    "categories": [
+      "스키"
+    ],
+    "reason": "CATEGORY_MISMATCH",
+    "action": "REMOVE_CATEGORY_ONLY"
+  },
+  {
+    "id": "db:674",
+    "name": "리버시티수상스키장",
+    "categories": [
+      "스키"
+    ],
+    "reason": "CATEGORY_MISMATCH",
+    "action": "REMOVE_CATEGORY_ONLY"
+  },
+  {
+    "id": "db:677",
+    "name": "물새수상스키장",
+    "categories": [
+      "스키"
+    ],
+    "reason": "CATEGORY_MISMATCH",
+    "action": "REMOVE_CATEGORY_ONLY"
+  },
+  {
+    "id": "db:684",
+    "name": "용인수상스키장",
+    "categories": [
+      "스키"
+    ],
+    "reason": "CATEGORY_MISMATCH",
+    "action": "REMOVE_CATEGORY_ONLY"
+  },
+  {
+    "name": "황우지해안(선녀탕)",
+    "categories": [
+      "스노클링"
+    ],
+    "reason": "ENTRY_PROHIBITED",
+    "action": "EXCLUDE_ACTIVE_CANDIDATE",
+    "evidence": [
+      {
+        "sourceUrl": "https://visitjeju.net/kr/detail/view?contentsid=CNTS_000000000018383",
+        "checkedAt": "2026-11-26",
+        "values": {
+          "reason": "낙석 위험, 물가 접근 통제 및 수영·스노클링 금지"
+        }
+      }
+    ]
+  }
+]

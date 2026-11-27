@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePlaceCatalog } from '@/domains/place/hooks/usePlaces';
-import { createPlaceDraft } from '../api/adminApi';
+import { createPlaceDraft, getSnorkelingCandidates } from '../api/adminApi';
 import { adminDraftPlacesKey } from '../queries/adminPlacesQuery';
 import { adminSummaryQuery } from '../queries/adminSummaryQuery';
 import { placeField, placeFieldLabel, placePanel, placeSecondaryButton } from './adminPlaceStyles';
@@ -14,6 +14,9 @@ export default function AdminPlaces() {
   const queryClient = useQueryClient();
   const catalog = usePlaceCatalog();
   const [latestDraftId, setLatestDraftId] = useState<number>();
+  const [candidatePage, setCandidatePage] = useState(0);
+  const snorkeling = useQuery({ queryKey: ['admin', 'snorkeling-candidates', candidatePage],
+    queryFn: ({ signal }) => getSnorkelingCandidates(candidatePage, signal) });
   const [selectedRegionId, setSelectedRegionId] = useState('');
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
@@ -66,6 +69,27 @@ export default function AdminPlaces() {
           새 장소 등록
         </a>
       </header>
+      <section className={`${placePanel} mb-4`} aria-labelledby="snorkeling-review-heading">
+        <h2 id="snorkeling-review-heading" className="text-base font-bold">스노클링 조사 후보</h2>
+        <p className="mt-2 text-sm text-slate-600">입수 가능 여부 미확인 · 검수 대기 장소는 공개 추천에 표시되지 않습니다.</p>
+        {snorkeling.isPending && <p role="status" className="mt-3 text-sm">후보를 불러오는 중…</p>}
+        {snorkeling.isError && <p role="alert" className="mt-3 text-sm text-red-700">후보를 불러오지 못했어요.</p>}
+        {snorkeling.data && <>
+          <p className="mt-3 text-sm font-semibold">검수 대기 후보 {snorkeling.data.totalElements}건</p>
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {snorkeling.data.items.map(item => <li key={item.candidateId} className="rounded-lg border border-slate-200 p-3 text-sm">
+              <strong>{item.facilityName}</strong>
+              <span className="block text-xs text-amber-800">입수 미확인 · {item.reviewStatus === 'PENDING' ? '검수 대기' : item.reviewStatus}</span>
+              {item.existingPlaceId && <span className="block text-xs text-slate-500">기존 장소 #{item.existingPlaceId}</span>}
+            </li>)}
+          </ul>
+          <div className="mt-3 flex items-center gap-3 text-sm">
+            <button type="button" className={placeSecondaryButton} disabled={candidatePage === 0} onClick={() => setCandidatePage(page => page - 1)}>이전</button>
+            <span>{candidatePage + 1}페이지</span>
+            <button type="button" className={placeSecondaryButton} disabled={(candidatePage + 1) * snorkeling.data.size >= snorkeling.data.totalElements} onClick={() => setCandidatePage(page => page + 1)}>다음</button>
+          </div>
+        </>}
+      </section>
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)]">
         <AdminPlaceReview key={latestDraftId} />
         <form className={`${placePanel} space-y-4`} aria-labelledby="new-place-heading" onSubmit={submit}>

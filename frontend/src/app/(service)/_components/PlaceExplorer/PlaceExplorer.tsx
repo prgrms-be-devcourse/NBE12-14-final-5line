@@ -203,7 +203,7 @@ export default function PlaceExplorer() {
               aria-pressed={category === item}
               onClick={() => changePlaceSearchFilters({ category: item })}
             >
-              {item}
+              {item}{item !== '전체' && <span aria-hidden="true" className="ml-1 text-[11px] text-[#9aa5b5]">{catalog.data?.categories.find(option => option.name === item)?.publishedPlaceCount ?? 0}</span>}
             </button>
           ))}
         </nav>
@@ -256,6 +256,7 @@ export default function PlaceExplorer() {
                       <div className="p-3 min-[68.8125rem]:p-4">
                         <p className="text-[11px] text-[#7c899d]">{place.address ?? '주소 미확인'}</p>
                         <h2 className="mt-[5px] text-[14px] font-extrabold tracking-[-.5px] md:text-[16px]">{place.name}</h2>
+                        <p className="mt-2 text-[11px] text-[#596579]">{place.pricePreview ?? '요금 미확인'}</p>
                       </div>
                     </button>
                     <PlacePhotoCredit place={place} />
