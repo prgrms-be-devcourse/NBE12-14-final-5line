@@ -68,6 +68,8 @@ public class PlaceSearchRepository {
                        MAX(CASE WHEN free_of_charge=1 THEN 1 ELSE 0 END) AS free
                 FROM place_price
                 WHERE place_id IN (:ids) AND verification_status='VERIFIED' AND verified_at IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM place_activity pa JOIN activity_type atp ON atp.activity_type_id=pa.activity_type_id
+                    WHERE pa.place_id=place_price.place_id AND atp.name IN ('해수욕장','스노클링'))
                   AND price_basis='NORMAL' AND price_kind='ADMISSION'
                   AND age_band IS NULL AND day_type IS NULL AND season_label IS NULL
                   AND duration_minutes IS NULL AND use_count IS NULL AND passenger_count IS NULL

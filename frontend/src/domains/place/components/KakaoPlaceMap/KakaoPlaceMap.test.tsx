@@ -245,4 +245,28 @@ describe('카카오 장소 지도', () => {
     view.unmount();
     width.mockRestore(); height.mockRestore();
   });
+  it('장소 데이터가 늦게 도착해도 기본 서울 범위로 먼저 검색하지 않는다', async () => {
+    const { api, map } = createFakeSdk();
+    vi.mocked(loadKakaoMaps).mockResolvedValue(api);
+    let resize!: () => void;
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { resize = callback; }
+      observe() {} disconnect() {}
+    });
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+    const onBoundsChange = vi.fn();
+    const view = render(<KakaoPlaceMap places={[]} selection={null} onSelect={vi.fn()} onBoundsChange={onBoundsChange}/>);
+    await waitFor(() => expect(api.Map).toHaveBeenCalled());
+    vi.useFakeTimers();
+    act(() => resize());
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(onBoundsChange).not.toHaveBeenCalled();
+    expect(map.setBounds).not.toHaveBeenCalled();
+    view.rerender(<KakaoPlaceMap places={samplePlaces} selection={null} onSelect={vi.fn()} onBoundsChange={onBoundsChange}/>);
+    expect(map.setBounds).toHaveBeenCalledOnce();
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(onBoundsChange).toHaveBeenCalledOnce();
+  });
+
 });

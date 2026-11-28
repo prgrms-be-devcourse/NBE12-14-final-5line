@@ -1,20 +1,21 @@
-.outpick-placeCard {
-  border-color: #e8edf3;
-  transition: border-color .15s, box-shadow .15s;
-}
+/* Adapted from Lucian UX/UI Prompt #012 #092 #242 #262 #305 #336 #381 #439 #441
+   MIT License (c) 2026 Seokwoooo · https://lucianlabs.dev/uxui-prompt/
+   Full license: frontend/THIRD_PARTY_NOTICES.md. Real data and Kakao maps only. */
+.outpick-explorer { --ux-accent: #5942FF; --ux-ink: #17172B; --ux-surface: #FFFFFF; --ux-surface-2: #F5F6F8; --ux-line: #ececf2; }
+.outpick-explorer nav[aria-label="활동 카테고리"] { scrollbar-width: none; scroll-snap-type: x proximity; }
+.outpick-explorer nav[aria-label="활동 카테고리"] button { scroll-snap-align: center; }
+@media (max-width: 767px) { .outpick-mobileMapMode aside[aria-label="장소 지도"] { height: calc(100dvh - 290px); min-height: 360px; } }
+.outpick-placeGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.outpick-placeCard { border: 0; box-shadow: none; border-radius: 14px; }
+.outpick-cardPhoto { transition: outline-color .15s; }
+.outpick-placeCardSelected .outpick-cardPhoto { outline: 2px solid #5942FF; outline-offset: 3px; }
+@media (hover: hover) { .outpick-placeCard:hover h2 { color: #5942FF; } }
+@media (min-width: 768px) and (max-width: 1050px) { .outpick-placeGrid { grid-template-columns: minmax(0, 1fr); } }
+@media (min-width: 1800px) { .outpick-placeGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 380px) { .outpick-placeGrid { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { .outpick-cardPhoto { transition: none; } }
 
-.outpick-placeCardSelected {
-  border-color: #5147ff;
-  box-shadow: 0 0 0 1px #5147ff, 0 6px 18px #23345724;
-}
-
-@media (hover: hover) {
-  .outpick-placeCard:not(.outpick-placeCardSelected):hover {
-    border-color: #aaa3ff;
-    box-shadow: 0 6px 18px #23345724;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .outpick-placeCard { transition: none; }
+@media (max-width: 767px) {
+  .outpick-mobileMapMode .outpick-mobileSheet { position: absolute; inset: auto 0 0; z-index: 4; height: var(--sheet-height); overflow-y: auto; overscroll-behavior: contain; padding-top: 4px; padding-bottom: 90px; border-radius: 20px 20px 0 0; background: white; box-shadow: 0 -3px 18px #17172b12; }
+  .outpick-mobileMapMode main { margin-bottom: 64px; }
 }

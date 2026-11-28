@@ -73,7 +73,7 @@ describe('DB 장소 상세 화면',()=>{
   it('미확인 정보를 꾸미지 않고 위험한 링크는 렌더링하지 않는다',async()=>{
     server.use(http.get(base+'/1',()=>HttpResponse.json({...body,address:null,latitude:null,longitude:null,homepage:'javascript:alert(1)',activities:[],notices:[],sources:[]})));
     mount(); await screen.findByRole('heading',{name:'DB 장소'});
-    expect(screen.getByText('등록된 활동 정보가 없습니다.')).toBeTruthy(); expect(screen.getByText('확인된 출처가 없습니다.')).toBeTruthy();
+    expect(screen.getByText('등록된 활동 정보가 없습니다.')).toBeTruthy(); expect(screen.queryByRole('heading', {name:'정보 제공 및 사진 출처'})).toBeNull();
     expect(screen.queryByRole('link',{name:'공식 안내 열기 ↗'})).toBeNull(); expect(screen.queryByRole('link',{name:'카카오맵 길찾기 ↗'})).toBeNull();
   });
   it.each(['','?id=999oops','?id=0','?id=1&id=2'])('잘못된 ID는 요청 없이 안내한다: %s',query=>{
@@ -96,6 +96,6 @@ describe('DB 장소 상세 화면',()=>{
     expect(await screen.findByText('입수 가능 여부 미확인')).toBeTruthy();
     expect(screen.getByText(/현재 스노클링 방문 추천 대상이 아닙니다/)).toBeTruthy();
     expect(screen.getByText(/공통 안전 수칙이며/)).toBeTruthy();
-    expect(screen.getByText(/가격 미확인은 무료를 뜻하지 않습니다/)).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: '확인된 정상 이용요금' })).toBeNull();
   });
 });

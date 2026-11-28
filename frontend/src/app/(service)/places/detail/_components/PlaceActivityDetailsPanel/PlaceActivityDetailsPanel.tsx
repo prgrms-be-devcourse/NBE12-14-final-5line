@@ -32,6 +32,7 @@ export default function PlaceActivityDetailsPanel({ activities, facts, operating
   const visible = [...new Set(activities)].map(name => ({ name, fields: (keys[name] ?? [])
     .filter(key => Object.hasOwn(facts, key) || Object.hasOwn(operating, key)) }))
     .filter(item => item.fields.length > 0);
+  if (visible.length === 0) return null;
   return <section aria-labelledby="activity-details-heading" className="border-t border-[#e9edf3] py-7">
     <h2 id="activity-details-heading" className="mb-3 text-[18px] font-bold">종목별 확인 정보</h2>
     {visible.length === 0 ? <p className="text-[13px] text-[#718096]">검증된 종목별 상세정보가 없습니다. 방문 전 공식 안내를 확인하세요.</p> :

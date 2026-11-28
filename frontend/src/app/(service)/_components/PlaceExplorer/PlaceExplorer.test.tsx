@@ -14,15 +14,16 @@ import type { PlaceMapBounds, PlaceMapItem, PlaceMapSelection, PlaceMapView } fr
 
 vi.mock('@/domains/place/components/KakaoPlaceMap/KakaoPlaceMap', async importOriginal => ({
   ...await importOriginal<typeof import('@/domains/place/components/KakaoPlaceMap/KakaoPlaceMap')>(),
-  default: ({ places, totalPlaces, onBoundsChange, onSelect, view, selection }: {
+  default: ({ places, totalPlaces, onBoundsChange, onSelect, view, selection, hoveredId }: {
     places: PlaceMapItem[];
+    hoveredId?: number | null;
     totalPlaces?: number;
     onBoundsChange: (bounds: PlaceMapBounds, view: PlaceMapView) => void;
     onSelect: (selection: PlaceMapSelection) => void;
     view: PlaceMapView | null;
     selection: PlaceMapSelection | null;
   }) => (
-    <div aria-label="테스트 지도" data-view={JSON.stringify(view)} data-ids={places.map(place => place.id).join(',')} data-total={totalPlaces}>
+    <div aria-label="테스트 지도" data-hovered={hoveredId} data-view={JSON.stringify(view)} data-ids={places.map(place => place.id).join(',')} data-total={totalPlaces}>
       <button onClick={() => onBoundsChange({ south: 37.37, north: 37.38, west: 128.39, east: 128.66 }, { lat: 37.375, lng: 128.525, level: 8 })}>테스트 지도 이동</button>
       <button onClick={() => onBoundsChange({ south: 38.37, north: 38.38, west: 128.39, east: 128.66 }, { lat: 38.375, lng: 128.525, level: 8 })}>다른 지도 범위로 이동</button>
       <button onClick={() => onBoundsChange({ south: 39.37, north: 39.38, west: 128.39, east: 128.66 }, { lat: 39.375, lng: 128.525, level: 8 })}>빈 지도 범위로 이동</button>
@@ -39,7 +40,7 @@ vi.mock('next/navigation', async () => {
     return () => window.removeEventListener('popstate', listener);
   }
   return {
-    usePathname: () => "/explore/",
+    usePathname: () => '/explore/',
     useSearchParams: () => new URLSearchParams(useSyncExternalStore(subscribe, () => window.location.search, () => '')),
   };
 });
@@ -70,6 +71,7 @@ beforeEach(() => {
   }
   requests = [];
   server.use(
+    http.get('https://api.outpick.test/api/v1/auth/csrf', () => HttpResponse.json({token:'test-csrf',headerName:'X-CSRF-TOKEN'})),
     http.get('https://api.outpick.test/api/v1/members/me', () => new HttpResponse(null, { status: 401 })),
     http.get(base + '/filters', () => HttpResponse.json({
       regions: [{ id: 101, name: '강원' }, { id: 201, name: '경기' }],
@@ -77,7 +79,7 @@ beforeEach(() => {
     })),
     http.get(base, ({ request }) => {
       const url = new URL(request.url); requests.push(url);
-      const filtered = url.searchParams.has('query') || url.searchParams.get('south') !== '-90';
+      const filtered = url.searchParams.has('query') || (url.searchParams.has('south') && url.searchParams.get('south') !== '-90');
       return HttpResponse.json({ items: filtered ? rows.slice(0, 1) : rows, page: Number(url.searchParams.get('page')), size: Number(url.searchParams.get('size')), totalElements: filtered ? 1 : 2 });
     })
   );
@@ -89,45 +91,31 @@ afterEach(() => {
 });
 
 describe('DB 장소 목록 화면', () => {
-  it('좌표가 있는 장소를 목록과 지도에 함께 표시한다', async () => {
+  it('좌표가 없는 장소도 목록에 유지하고 지도에는 좌표가 있는 곳만 표시한다', async () => {
     mount();
     expect(await screen.findByRole('heading', { name: '눈마루 리조트' })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: '파도 서프 스테이션' })).toBeNull();
+    expect(screen.getByRole('heading', { name: '파도 서프 스테이션' })).toBeTruthy();
     expect(screen.getByLabelText('테스트 지도').getAttribute('data-ids')).toBe('1');
     expect(requests[0].searchParams.get('size')).toBe('50');
   });
-  it('추가 조회 없이 마커와 카드의 선택을 공유하고 같은 장소를 누르면 해제한다', async () => {
+  it('카드 전체가 상세 링크이고 마커 선택과 카드 호버가 연동된다', async () => {
     const user = userEvent.setup();
     mount();
-    const cardButton = await screen.findByRole('button', { name: /눈마루 리조트/ });
+    const link = await screen.findByRole('link', { name: '눈마루 리조트 상세 보기' });
     const marker = screen.getByRole('button', { name: '테스트 마커 1' });
-    const scrollIntoView = vi.fn();
-    Object.defineProperty(cardButton.closest('article'), 'scrollIntoView', { value: scrollIntoView });
-
-    expect(cardButton.getAttribute('aria-pressed')).toBe('false');
+    const card = link.closest('article')!;
     await user.click(marker);
-    expect(cardButton.getAttribute('aria-pressed')).toBe('true');
+    expect(card.className).toContain('outpick-placeCardSelected');
     expect(marker.getAttribute('aria-pressed')).toBe('true');
-    expect(scrollIntoView).toHaveBeenCalledExactlyOnceWith({ block: 'nearest', inline: 'nearest' });
-
-    await user.click(cardButton);
-    expect(cardButton.getAttribute('aria-pressed')).toBe('false');
-    expect(marker.getAttribute('aria-pressed')).toBe('false');
-    expect(screen.queryByRole('link', { name: '장소 상세 보기 →' })).toBeNull();
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
-
-    await user.click(cardButton);
-    expect(marker.getAttribute('aria-pressed')).toBe('true');
-    await user.click(screen.getByRole('button', { name: '지도 보기' }));
     await user.click(marker);
-    expect(cardButton.getAttribute('aria-pressed')).toBe('false');
-    expect(marker.getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByRole('button', { name: '목록 보기' })).toBeTruthy();
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
-
-    await user.click(marker);
-    expect(screen.getByRole('button', { name: '지도 보기' }).getAttribute('aria-pressed')).toBe('false');
-    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(card.className).not.toContain('outpick-placeCardSelected');
+    fireEvent.mouseEnter(card);
+    expect(screen.getByLabelText('테스트 지도').getAttribute('data-hovered')).toBe('1');
+    fireEvent.mouseLeave(card);
+    expect(screen.getByLabelText('테스트 지도').getAttribute('data-hovered')).toBeNull();
+    expect(link.querySelector('h2')?.textContent).toBe('눈마루 리조트');
+    expect(link.querySelector('button, a')).toBeNull();
+    expect(card.querySelectorAll('a')).toHaveLength(2);
     expect(requests).toHaveLength(1);
   });
   it('한 번 받은 50곳으로 마커를 표시하고 스크롤과 마커 선택으로 카드를 10개씩 펼친다', async () => {
@@ -166,7 +154,7 @@ describe('DB 장소 목록 화면', () => {
     await user.click(marker);
     expect(screen.getByRole('button', { name: '지도 보기' })).toBeTruthy();
     expect(list.getAllByRole('listitem')).toHaveLength(40);
-    expect(list.getByRole('button', { name: /검증 장소 35/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(list.getByRole('link', { name: '검증 장소 35 상세 보기' }).closest('article')?.className).toContain('outpick-placeCardSelected');
     expect(scrollToCard).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
 
     act(() => reachListEnd());
@@ -270,11 +258,13 @@ describe('DB 장소 목록 화면', () => {
     }));
     const user = userEvent.setup();
     mount();
-    await user.click(await screen.findByRole('button', { name: /눈마루 리조트/ }));
+    await screen.findByRole('heading', { name: '눈마루 리조트' });
+    await user.click(screen.getByRole('button', { name: '테스트 마커 1' }));
+    scrollToCard.mockClear();
     await user.click(screen.getByRole('button', { name: '다른 지도 범위로 이동' }));
     await screen.findByRole('heading', { name: '새 영역 장소 1' });
     expect(screen.getByRole('button', { name: '테스트 마커 1' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: /눈마루 리조트/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('link', { name: '눈마루 리조트 상세 보기' }).closest('article')?.className).toContain('outpick-placeCardSelected');
     expect(scrollToCard).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: '빈 지도 범위로 이동' }));
@@ -395,11 +385,10 @@ describe('DB 장소 목록 화면', () => {
     const user = userEvent.setup();
     const initial = mount(client);
     await user.click(await screen.findByRole('button', { name: '테스트 마커 35' }));
-    const selectedCard = within(screen.getByRole('list', { name: '장소 목록' }))
-      .getByRole('heading', { name: '복귀 장소 1' }).closest('article')!;
-    await user.click(within(selectedCard).getByRole('button'));
+
+    await user.click(screen.getByRole('button', { name: '테스트 마커 1' }));
     if (scrollArea === '목록') {
-      const pane = screen.getByRole('region', { name: '이번 주말, 밖에서 뭐 하지?' });
+      const pane = screen.getByRole('region', { name: '새로운 즐거움을 발견하세요' });
       pane.style.overflowY = 'auto';
       pane.scrollTop = 920;
     }
@@ -411,7 +400,7 @@ describe('DB 장소 목록 화면', () => {
 
     const returned = mount(client);
     if (scrollArea === '목록') {
-      const pane = screen.getByRole('region', { name: '이번 주말, 밖에서 뭐 하지?' });
+      const pane = screen.getByRole('region', { name: '새로운 즐거움을 발견하세요' });
       pane.style.overflowY = 'auto';
       pane.scrollTo = paneScrollTo;
     }
@@ -428,7 +417,7 @@ describe('DB 장소 목록 화면', () => {
     expect(screen.getByRole('button', { name: '테스트 마커 1' }).getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByRole('button', { name: '테스트 마커 35' }).getAttribute('aria-pressed')).toBe('true');
     expect(within(screen.getByRole('list', { name: '장소 목록' }))
-      .getByRole('button', { name: /복귀 장소 35\b/ }).getAttribute('aria-pressed')).toBe('true');
+      .getByRole('link', { name: '복귀 장소 35 상세 보기' }).closest('article')?.className).toContain('outpick-placeCardSelected');
     expect(requests).toHaveLength(1);
     rememberPlaceListPosition(35, 40, 1);
     returned.unmount();
@@ -453,4 +442,19 @@ describe('DB 장소 목록 화면', () => {
     expect((screen.getByRole('combobox', { name: '시즌' }) as HTMLSelectElement).value).toBe('');
     expect(new URLSearchParams(window.location.search).get('region')).toBe('강원');
   });
+});
+
+it('장소 카드에서 미확인 요금·출처와 상세 도로명주소를 숨긴다', async () => {
+  server.use(http.get(base, () => HttpResponse.json({ items: [{
+    ...rows[0], address: '경기도 고양시 일산동구 중앙로 1', pricePreview: '요금 미확인',
+    representativeImage: 'https://tong.visitkorea.or.kr/cms/resource/1/photo.jpg',
+    imageAttribution: '한국관광공사 TourAPI 제공', imageSourceUrl: 'https://example.com/photo', imageLicense: 'Type1',
+  }], page: 0, size: 20, totalElements: 1 })));
+  mount();
+  await screen.findByRole('heading', { name: rows[0].name });
+  const card = document.querySelector('[data-place-id="1"]')!;
+  expect(within(card as HTMLElement).getByText('경기도 고양시 일산동구')).toBeTruthy();
+  expect(card.textContent).not.toMatch(/요금 미확인|중앙로|TourAPI|공공누리|사진 출처/);
+  expect(within(card as HTMLElement).getByRole('link', { name: `${rows[0].name} 상세 보기` })).toBeTruthy();
+  expect(within(card as HTMLElement).queryByRole('link', { name: /카카오맵 길찾기/ })).toBeNull();
 });

@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import { Bookmark } from 'lucide-react';
 import {
   changeFavoriteNotification,
   removeFavoritePlace,
@@ -9,7 +10,8 @@ import {
 } from '@/domains/favorite/api/favoriteApi';
 import { favoritePlacesQuery, useFavoritePlaces } from '@/domains/favorite/hooks/useFavoritePlaces';
 import { useCurrentMember } from '@/domains/member/hooks/useCurrentMember';
-import PlacePhoto, { PlacePhotoCredit } from '@/domains/place/components/PlacePhoto/PlacePhoto';
+import { compactPlaceAddress } from '@/domains/place/lib/placeCardDisplay';
+import PlacePhoto from '@/domains/place/components/PlacePhoto/PlacePhoto';
 import { ApiError } from '@/shared/lib/http/apiError';
 
 const linkClassName = 'font-bold text-[#5147d9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5147ff]';
@@ -30,7 +32,7 @@ function FavoritePlacesList({ memberId }: { memberId: number }) {
     </p>;
   }
   if (!favorites.data?.length) {
-    return <p className="text-sm text-slate-600">저장한 관심 장소가 없어요. <Link className={linkClassName} href="/">장소 둘러보기</Link></p>;
+    return <div className="rounded-2xl bg-[#F5F6F8] px-6 py-16 text-center"><Bookmark size={32} strokeWidth={1.5} className="mx-auto mb-5 text-[#5942FF]" aria-hidden="true"/><h2 className="text-lg font-semibold text-[#17172B]">저장한 관심 장소가 없어요.</h2><p className="mt-2 text-sm text-slate-500">가보고 싶은 장소를 저장하고 다음 외출을 준비해 보세요.</p><Link className={`${linkClassName} mt-6 inline-flex min-h-11 items-center rounded-full bg-[#5942FF] px-5 !text-white`} href="/explore/">장소 둘러보기</Link></div>;
   }
 
   return (
@@ -83,13 +85,13 @@ function FavoritePlaceItem({ memberId, place }: { memberId: number; place: Favor
         </div>
       )}
       <div className={place.publishStatus === 'HIDDEN' ? 'sm:col-span-2' : undefined}>
-        <h2 className="text-base font-bold">
+        <h2 className="line-clamp-2 break-words text-base font-bold">
           {place.publishStatus === 'PUBLISHED'
             ? <Link className={linkClassName} href={`/places/detail/?id=${place.id}`}>{name}</Link>
             : name}
         </h2>
         <p className="mt-1 text-sm text-[#718096]">
-          {place.publishStatus === 'PUBLISHED' ? place.address ?? '주소 미확인' : '현재 볼 수 없는 장소'}
+          {place.publishStatus === 'PUBLISHED' ? compactPlaceAddress(place.address) : '현재 볼 수 없는 장소'}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           {place.publishStatus === 'PUBLISHED' && (
@@ -115,9 +117,7 @@ function FavoritePlaceItem({ memberId, place }: { memberId: number; place: Favor
           >
             관심 해제
           </button>
-          {place.publishStatus === 'PUBLISHED' && (
-            <PlacePhotoCredit place={place} compact className="min-w-0 flex-[1_1_10rem] self-end text-right text-[9px]/[1.4]" />
-          )}
+
         </div>
         {mutation.isError && <p className="mt-2 text-sm text-red-700" role="alert">
           {mutation.error instanceof ApiError ? mutation.error.message : '관심 장소를 변경하지 못했어요.'}

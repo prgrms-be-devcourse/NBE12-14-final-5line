@@ -25,7 +25,7 @@ const regions = http.get(`${api}/places/filters`, () => HttpResponse.json({
 
 beforeEach(() => server.use(
   http.get(`${api}/admin/place-candidates/snorkeling`, () => HttpResponse.json({ items: [], page: 0, size: 20, totalElements: 0 })),
-  http.get(`${api}/admin/places/:placeId/evidence`, () => HttpResponse.json({ prices: [], facts: [] })),
+  http.get(`${api}/admin/places/:placeId/evidence`, () => HttpResponse.json({ prices: [], facts: [] }))
 ));
 
 function renderPlaces() {
@@ -120,7 +120,7 @@ it('스노클링 후보를 입수 미확인 검수 대기로 표시하고 공개
     http.get(`${api}/admin/place-candidates/snorkeling`, () => HttpResponse.json({
       items: [{ candidateId: 'candidate-1', facilityName: '검수 대기 해변', reviewStatus: 'PENDING',
         recommendable: false, existingPlaceId: null }], page: 0, size: 20, totalElements: 1,
-    })),
+    }))
   );
   renderPlaces();
   const review = within(screen.getByRole('region', { name: '스노클링 조사 후보' }));

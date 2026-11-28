@@ -27,18 +27,18 @@ export default function AdminPlaceEvidence({ placeId }: { placeId: number }) {
       equipmentType: optional(data, 'equipmentType'), rawPriceText: optional(data, 'rawPriceText'),
       sourceKind: text(data, 'sourceKind'), sourceUrl: text(data, 'sourceUrl'),
       checkedAt: text(data, 'checkedAt'), validFrom: optional(data, 'validFrom'), validUntil: optional(data, 'validUntil') },
-      { onSuccess: () => form.reset() });
+    { onSuccess: () => form.reset() });
   };
   const addFactDraft = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
     addFact.mutate({ fieldKey: text(data, 'fieldKey'), valueJson: text(data, 'valueJson'),
       sourceKind: text(data, 'sourceKind'), sourceUrl: text(data, 'sourceUrl'),
       checkedAt: text(data, 'checkedAt'), validFrom: optional(data, 'validFrom'), validUntil: optional(data, 'validUntil') },
-      { onSuccess: () => form.reset() });
+    { onSuccess: () => form.reset() });
   };
   const review = useMutation({ mutationFn: ({ kind, id, status }: { kind: 'prices' | 'facts'; id: number; status: ReviewStatus }) =>
     reviewAdminEvidence(placeId, kind, id, status),
-    onSuccess: async () => { await client.invalidateQueries({ queryKey: key }); } });
+  onSuccess: async () => { await client.invalidateQueries({ queryKey: key }); } });
   const controls = (kind: 'prices' | 'facts', id: number, status: ReviewStatus) => <div className="mt-2 flex flex-wrap gap-2">
     {(['VERIFIED', 'NEEDS_REVIEW', 'REJECTED'] as const).filter(next => next !== status).map(next =>
       <button key={next} type="button" className={placeSecondaryButton} disabled={review.isPending}
