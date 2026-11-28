@@ -1,0 +1,41 @@
+CREATE TABLE fishery_resource (
+  resource_id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL UNIQUE,
+  scientific_name VARCHAR(160) NULL,
+  category VARCHAR(30) NOT NULL,
+  CONSTRAINT ck_fishery_category CHECK (category IN ('CRUSTACEAN','SHELLFISH','CEPHALOPOD','SEAWEED','OTHER'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE fishery_protection_rule (
+  rule_id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  resource_id BIGINT NOT NULL,
+  rule_kind VARCHAR(30) NOT NULL,
+  start_month TINYINT NULL, start_day TINYINT NULL,
+  end_month TINYINT NULL, end_day TINYINT NULL,
+  crosses_year BOOLEAN NOT NULL DEFAULT FALSE,
+  threshold_value DECIMAL(9,2) NULL,
+  threshold_unit VARCHAR(10) NULL,
+  measurement_method VARCHAR(30) NULL,
+  compare_operator VARCHAR(5) NULL,
+  region_name VARCHAR(100) NULL,
+  excluded_region VARCHAR(100) NULL,
+  area_description TEXT NULL,
+  applicability VARCHAR(120) NOT NULL DEFAULT 'GENERAL',
+  exception_text TEXT NULL,
+  legal_basis VARCHAR(255) NOT NULL,
+  notice_number VARCHAR(100) NULL,
+  effective_date DATE NULL,
+  source_basis_date DATE NOT NULL,
+  source_document VARCHAR(255) NOT NULL,
+  source_excerpt TEXT NOT NULL,
+  official_url VARCHAR(1000) NULL,
+  verification_status VARCHAR(20) NOT NULL DEFAULT 'NEEDS_REVIEW',
+  last_verified_at DATETIME NULL,
+  CONSTRAINT fk_fishery_rule_resource FOREIGN KEY (resource_id) REFERENCES fishery_resource(resource_id),
+  CONSTRAINT ck_fishery_rule_kind CHECK (rule_kind IN ('CLOSED_SEASON','MIN_SIZE','MIN_WEIGHT','AREA_RESTRICTION','UNRESOLVED')),
+  CONSTRAINT ck_fishery_rule_status CHECK (verification_status IN ('NEEDS_REVIEW','VERIFIED','REJECTED')),
+  CONSTRAINT ck_fishery_rule_verified CHECK (verification_status <> 'VERIFIED' OR last_verified_at IS NOT NULL),
+  CONSTRAINT ck_fishery_rule_threshold CHECK (threshold_value IS NULL OR threshold_value > 0),
+  CONSTRAINT ck_fishery_rule_months CHECK ((start_month IS NULL AND end_month IS NULL) OR (start_month BETWEEN 1 AND 12 AND end_month BETWEEN 1 AND 12)),
+  KEY ix_fishery_rule_lookup (resource_id,rule_kind,verification_status,region_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

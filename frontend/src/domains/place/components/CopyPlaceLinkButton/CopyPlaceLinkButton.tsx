@@ -1,10 +1,11 @@
 'use client';
 
+import ActionToast from '@/shared/components/ActionToast';
 import { useEffect, useState } from 'react';
 
 const focusClassName = 'focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#5147ff]';
 
-export default function CopyPlaceLinkButton({ label, path }: { label: string; path?: string }) {
+export default function CopyPlaceLinkButton({ label, path, text }: { label: string; path?: string; text?: string }) {
   const [feedback, setFeedback] = useState<{ copied: boolean; url: string } | null>(null);
   const [copying, setCopying] = useState(false);
 
@@ -16,7 +17,7 @@ export default function CopyPlaceLinkButton({ label, path }: { label: string; pa
 
   async function copyLink() {
     // 클릭 시 주소를 읽어서 마지막 지도 이동과 필터를 반영합니다.
-    const url = path ? new URL(path, window.location.origin).href : window.location.href;
+    const url = text ?? (path ? new URL(path, window.location.origin).href : window.location.href);
     setCopying(true);
     setFeedback(null);
     try {
@@ -41,13 +42,12 @@ export default function CopyPlaceLinkButton({ label, path }: { label: string; pa
       >
         {copying ? '복사 중…' : label}
       </button>
-      <span className="text-[11px]/[1.6] text-[#6156cc] empty:hidden" role="status">
-        {feedback && (feedback.copied ? '링크를 복사했어요.' : '복사하지 못했어요. 아래 주소를 직접 복사해 주세요.')}
-      </span>
+      {feedback?.copied && <ActionToast message={text ? '주소를 복사했어요.' : '링크를 복사했어요.'} onDismiss={()=>setFeedback(null)}/>}
+      {feedback && !feedback.copied && <p className="text-[11px]/[1.6] text-[#6156cc]" role="status">복사하지 못했어요. 아래 주소를 직접 복사해 주세요.</p>}
       {feedback && !feedback.copied && (
         <input
           className={`w-[260px] max-w-full min-w-0 rounded-md border border-[#dfe4ed] bg-[#fafbfe] p-2 text-xs text-[#16243b] ${focusClassName}`}
-          aria-label="공유할 링크"
+          aria-label={text ? '복사할 주소' : '공유할 링크'}
           readOnly
           value={feedback.url}
           onFocus={event => event.currentTarget.select()}

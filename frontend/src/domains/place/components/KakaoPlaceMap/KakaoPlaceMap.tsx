@@ -1,16 +1,17 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadKakaoMaps } from '../../lib/loadKakaoMaps';
 import { sameMapView } from '../../lib/placeMapParams';
 import type { KakaoMap, KakaoMapsApi, KakaoOverlay, PlaceMapBounds, PlaceMapView, PlaceMapItem, PlaceMapSelection } from '../../types/kakaoMap.type';
 import './KakaoPlaceMap.css';
+import { clusterPlaces, type PlaceCluster } from '../../lib/clusterPlaces';
 
 export const mapMessageClassName = 'absolute inset-x-[18px] top-[28%] z-[3] rounded-xl border border-[#e4e9f1] bg-[#fffffff5] p-5 text-center text-[13px]/[1.8] text-[#63718a]';
 export const mapRetryButtonClassName = 'mt-[15px] cursor-pointer rounded-lg bg-[#5147ff] px-3.5 py-[9px] text-xs/[1.8] text-white';
 
-type MapContext = { api: KakaoMapsApi; map: KakaoMap; moveWithoutSearch: (move: () => void) => void };
-type Pin = { place: PlaceMapItem; overlay: KakaoOverlay; button: HTMLButtonElement; dispose: () => void };
+type MapContext = { api: KakaoMapsApi; map: KakaoMap; moveWithoutSearch: (move: () => void) => void; fitInitial?: () => void };
+type Pin = { place: PlaceCluster; overlay: KakaoOverlay; button: HTMLButtonElement; dispose: () => void };
 
 function fitPlaces({ api, map }: Pick<MapContext, 'api' | 'map'>, places: PlaceMapItem[]) {
   if (places.length === 0) return;
@@ -24,7 +25,8 @@ function fitPlaces({ api, map }: Pick<MapContext, 'api' | 'map'>, places: PlaceM
   map.setBounds(bounds, 70, 30, 180, 30);
 }
 
-export default function KakaoPlaceMap({ places, totalPlaces, searchingArea = false, selection, onSelect, onBoundsChange, view = null, hasSearchBounds = false }: {
+export default function KakaoPlaceMap({ places, totalPlaces, searchingArea = false, selection, onSelect, onBoundsChange, view = null, hasSearchBounds = false, hoveredId = null }: {
+  hoveredId?: number | null;
   places: PlaceMapItem[];
   totalPlaces?: number;
   searchingArea?: boolean;
@@ -36,11 +38,14 @@ export default function KakaoPlaceMap({ places, totalPlaces, searchingArea = fal
 }) {
   const container = useRef<HTMLDivElement>(null);
   const pins = useRef(new Map<number, Pin>());
+  const previousPlaceCount = useRef(places.length);
   const previousView = useRef<PlaceMapView | null>(view);
   const latest = useRef({ places, onSelect, onBoundsChange, view, hasSearchBounds });
   const [context, setContext] = useState<MapContext | null>(null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [zoomLevel, setZoomLevel] = useState(view?.level ?? 11);
+  const groupedPlaces = useMemo(() => clusterPlaces(places, zoomLevel, hoveredId, selection?.id), [places, zoomLevel, hoveredId, selection?.id]);
 
   useEffect(() => {
     latest.current = { places, onSelect, onBoundsChange, view, hasSearchBounds };
@@ -70,12 +75,13 @@ export default function KakaoPlaceMap({ places, totalPlaces, searchingArea = fal
         searchPending = false;
         cancelSearch();
       };
-      const next = { api, map, moveWithoutSearch };
+      const next: MapContext = { api, map, moveWithoutSearch };
       const startSearch = () => {
         searchPending = true;
         cancelSearch();
       };
       const search = () => {
+        setZoomLevel(map.getLevel());
         if (!searchPending) return;
         cancelSearch();
         timer = setTimeout(() => {
@@ -102,8 +108,10 @@ export default function KakaoPlaceMap({ places, totalPlaces, searchingArea = fal
         api.event.removeListener(map, 'bounds_changed', cancelSearch);
         api.event.removeListener(map, 'idle', search);
       };
-      observer = new ResizeObserver(() => {
+      const resize = () => {
         if (element.clientWidth === 0 || element.clientHeight === 0) return;
+        // Wait for the first API result before fitting/searching; otherwise Seoul bounds can hide coastal results.
+        if (!fitted && !latest.current.places.length && !latest.current.view && !latest.current.hasSearchBounds) { map.relayout(); return; }
         const shouldSearch = searchPending || (!fitted && !latest.current.hasSearchBounds);
         const center = map.getCenter();
         moveWithoutSearch(() => {
@@ -124,8 +132,11 @@ export default function KakaoPlaceMap({ places, totalPlaces, searchingArea = fal
           search();
         }
         fitted = true;
-      });
+      };
+      next.fitInitial = () => { if(!fitted)resize(); };
+      observer = new ResizeObserver(resize);
       observer.observe(element);
+      setZoomLevel(map.getLevel());
       setContext(next);
     }).catch(() => {
       if (active) setError(true);
@@ -137,6 +148,12 @@ export default function KakaoPlaceMap({ places, totalPlaces, searchingArea = fal
       element.replaceChildren();
     };
   }, [attempt]);
+
+  useEffect(() => {
+    const becameReady = previousPlaceCount.current === 0 && places.length > 0;
+    previousPlaceCount.current = places.length;
+    if (becameReady) context?.fitInitial?.();
+  }, [context, places]);
 
   const lat = view?.lat;
   const lng = view?.lng;
@@ -171,7 +188,7 @@ export default function KakaoPlaceMap({ places, totalPlaces, searchingArea = fal
     if (!context) return;
     const { api, map } = context;
     const currentPins = pins.current;
-    const nextIds = new Set(places.map(place => place.id));
+    const nextIds = new Set(groupedPlaces.map(place => place.id));
     for (const [id, pin] of currentPins) {
       if (!nextIds.has(id)) {
         pin.dispose();
@@ -179,13 +196,13 @@ export default function KakaoPlaceMap({ places, totalPlaces, searchingArea = fal
       }
     }
 
-    for (const place of places) {
+    for (const place of groupedPlaces) {
       const pin = currentPins.get(place.id);
       if (pin) {
-        if (place.name !== pin.place.name) {
-          pin.button.textContent = place.name;
-          pin.button.setAttribute('aria-label', `${place.name} 지도에서 선택`);
-        }
+        const clustered = place.memberIds.length > 1;
+        pin.button.textContent = clustered ? String(place.memberIds.length) : place.name;
+        pin.button.className = clustered ? 'outpick-mapCluster' : 'outpick-mapPin';
+        pin.button.setAttribute('aria-label', clustered ? `${place.memberIds.length}개 장소 확대` : `${place.name} 지도에서 선택`);
         if (place.latitude !== pin.place.latitude || place.longitude !== pin.place.longitude) {
           pin.overlay.setPosition(new api.LatLng(place.latitude, place.longitude));
         }
@@ -194,11 +211,20 @@ export default function KakaoPlaceMap({ places, totalPlaces, searchingArea = fal
       }
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'outpick-mapPin';
-      button.textContent = place.name;
-      button.setAttribute('aria-label', `${place.name} 지도에서 선택`);
+      const clustered = place.memberIds.length > 1;
+      button.className = clustered ? 'outpick-mapCluster' : 'outpick-mapPin';
+      button.textContent = clustered ? String(place.memberIds.length) : place.name;
+      button.setAttribute('aria-label', clustered ? `${place.memberIds.length}개 장소 확대` : `${place.name} 지도에서 선택`);
       button.setAttribute('aria-pressed', 'false');
-      const select = () => latest.current.onSelect({ id: place.id, source: 'map' });
+      const select = () => {
+        const current = currentPins.get(place.id)?.place;
+        if (!current) return;
+        if (current.memberIds.length > 1) {
+          map.setCenter(new api.LatLng(current.latitude, current.longitude));
+          map.setLevel(Math.max(1, map.getLevel() - 2));
+          setZoomLevel(map.getLevel());
+        } else latest.current.onSelect({ id: current.id, source: 'map' });
+      };
       button.addEventListener('click', select);
       const overlay = new api.CustomOverlay({
         position: new api.LatLng(place.latitude, place.longitude),
@@ -213,7 +239,7 @@ export default function KakaoPlaceMap({ places, totalPlaces, searchingArea = fal
       };
       currentPins.set(place.id, { place, overlay, button, dispose });
     }
-  }, [context, places]);
+  }, [context, groupedPlaces]);
 
   const selectedId = selection?.id;
   useEffect(() => {
@@ -221,11 +247,11 @@ export default function KakaoPlaceMap({ places, totalPlaces, searchingArea = fal
     pins.current.forEach(pin => {
       const selected = pin.place.id === selectedId;
       const pressed = String(selected);
-      if (pin.button.getAttribute('aria-pressed') === pressed) return;
       pin.button.setAttribute('aria-pressed', pressed);
-      pin.overlay.setZIndex(selected ? 10 : 1);
+      pin.button.dataset.highlighted = String(pin.place.id === hoveredId);
+      pin.overlay.setZIndex(selected || pin.place.id === hoveredId ? 10 : 1);
     });
-  }, [context, places, selectedId]);
+  }, [context, groupedPlaces, selectedId, hoveredId]);
 
   useEffect(() => {
     if (!context || selection?.source !== 'list') return;
@@ -245,7 +271,7 @@ export default function KakaoPlaceMap({ places, totalPlaces, searchingArea = fal
     <div className="relative size-full bg-[#edf1f5]">
       <div ref={container} className="absolute inset-0" role="region" aria-label="장소 지도" />
       <p className="pointer-events-none absolute top-4 left-4 z-[2] rounded-lg bg-[#fffffff0] px-3 py-2 text-[11px] text-[#596a7e] shadow-[0_2px_8px_#16243b12]" role="status">
-        {searchingArea ? '이 영역의 장소를 찾는 중' : totalPlaces !== undefined && totalPlaces > places.length
+        {searchingArea ? '이 영역의 장소를 찾는 중' : totalPlaces && places.length === 0 ? '위치 정보가 없는 장소는 목록에서 살펴보세요.' : totalPlaces !== undefined && totalPlaces > places.length
           ? `${totalPlaces}곳 중 ${places.length}곳을 표시 중이에요. 지도를 확대해 좁은 범위를 살펴보세요.`
           : '지도 범위의 장소를 표시합니다'}
         {places.some(place => place.name.startsWith('[데모]')) && ' · 데모 좌표는 실제 시설 위치가 아닙니다'}

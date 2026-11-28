@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import ConfirmDialog from '@/shared/components/ConfirmDialog';
+import ActionToast from '@/shared/components/ActionToast';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { currentMember, type Member } from '@/domains/member/api/memberApi';
@@ -76,6 +78,7 @@ function PlaceReviewsForPlace({ placeId }: { placeId: number }) {
       setBody('');
       setEditingId(null);
       setCreatedReviewId(null);
+      setNotice(editingId !== null ? '후기를 수정했어요.' : '후기를 등록했어요.');
     } catch {
       setError(savedReviewId !== null && editingId === null
         ? '후기는 저장됐어요. 남은 사진은 다시 눌러 업로드해 주세요.'
@@ -104,6 +107,7 @@ function PlaceReviewsForPlace({ placeId }: { placeId: number }) {
       await deleteReview(reviewId);
       await refresh();
       setConfirmDeleteId(null);
+      setNotice('후기를 삭제했어요.');
       if (editingId === reviewId) { setEditingId(null); setBody(''); }
     } catch {
       setError('후기를 삭제하지 못했어요. 다시 시도해 주세요.');
@@ -166,7 +170,7 @@ function PlaceReviewsForPlace({ placeId }: { placeId: number }) {
       </div> : memberCheckFailed ? <p className={emptyClassName}>로그인 상태를 확인하지 못했어요. 연결 상태를 확인한 뒤 새로고침해 주세요.</p>
         : <p className={emptyClassName}>후기는 <Link className="font-bold text-[#5147d9]" href="/login/">로그인</Link> 후 작성할 수 있어요.</p>}
       {error && <p className={`${messageClassName} bg-[#fff0f1] text-[#ab303c]`} role="alert">{error}</p>}
-      {notice && <p className={`${messageClassName} bg-[#ecf8f2] text-[#267454]`} role="status">{notice}</p>}
+      {notice && <ActionToast message={notice} onDismiss={() => setNotice('')}/>}
       {reviews.length ? <ul className="mt-[18px] list-none p-0">{reviews.map(review => <li key={review.id} className="border-b border-[#e9edf3] py-5">
         <div className="flex items-center justify-between gap-3 text-[13px]"><strong>{review.authorNickname}</strong><time className="text-[12px] text-[#8793a7]" dateTime={review.createdAt}>{review.createdAt.slice(0, 10)}</time></div>
         <p className="mt-3 text-sm/[1.7] wrap-anywhere whitespace-pre-wrap">{review.body}</p>
@@ -179,8 +183,7 @@ function PlaceReviewsForPlace({ placeId }: { placeId: number }) {
         </div>)}</div>}
         {member?.id === review.authorId && <div className={`${actionsClassName} text-[12px]`}>
           <button className={reviewButtonClassName} type="button" onClick={() => { setEditingId(review.id); setBody(review.body); setConfirmDeleteId(null); }}>수정</button>
-          {confirmDeleteId === review.id ? <><span>삭제할까요?</span><button className={reviewButtonClassName} type="button" disabled={busy} onClick={() => void remove(review.id)}>삭제 확인</button><button className={reviewButtonClassName} type="button" onClick={() => setConfirmDeleteId(null)}>취소</button></> :
-            <button className={reviewButtonClassName} type="button" onClick={() => setConfirmDeleteId(review.id)}>삭제</button>}
+          <button className={reviewButtonClassName} type="button" onClick={() => setConfirmDeleteId(review.id)}>삭제</button>
         </div>}
         {member?.id === review.authorId && (review.photos?.length ?? 0) < 3 && <label className="mt-3 inline-block cursor-pointer rounded-[7px] bg-[#f0efff] px-2.5 py-2 text-[12px] text-[#5147d9]">
           사진 추가 (JPEG/PNG · 5MB 이하)
@@ -197,5 +200,6 @@ function PlaceReviewsForPlace({ placeId }: { placeId: number }) {
         </div>}
       </li>)}</ul> : <p className={emptyClassName}>아직 등록된 후기가 없어요. 첫 후기를 남겨 주세요.</p>}
     </>}
+    <ConfirmDialog open={confirmDeleteId !== null} busy={busy} onCancel={() => setConfirmDeleteId(null)} onConfirm={() => { if(confirmDeleteId !== null)void remove(confirmDeleteId); }}/>
   </section>;
 }

@@ -1,6 +1,7 @@
 package com.outpick.domain.place;
 
 import com.jayway.jsonpath.JsonPath;
+import com.outpick.domain.member.AuthTestClient;
 import com.outpick.domain.place.entity.ActivityCategory;
 import com.outpick.domain.place.entity.ActivityType;
 import com.outpick.domain.place.entity.Place;
@@ -29,7 +30,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -87,12 +87,125 @@ class AdminPlaceApiTests {
     @Autowired JdbcTemplate jdbc;
 
     @Test
+    @DisplayName("스노클링 입수 미확인 후보는 운영자에게만 검수 대기로 표시한다")
+    void snorkelingCandidatesAreAdminOnly() throws Exception {
+        jdbc.update("""
+                INSERT INTO place_import_candidate(candidate_id, category_name, facility_name,
+                    review_status, recommendable, raw_evidence)
+                VALUES ('snorkeling-admin-test', '스노클링', '검수 대기 해변', 'PENDING', false, '{}')
+                """);
+        mvc.perform(get("/api/v1/admin/place-candidates/snorkeling"))
+                .andExpect(status().isUnauthorized());
+        var admin = login("admin@example.com", "12341234");
+        mvc.perform(get("/api/v1/admin/place-candidates/snorkeling").cookie(admin.cookies()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.items[0].facilityName").value("검수 대기 해변"))
+                .andExpect(jsonPath("$.items[0].reviewStatus").value("PENDING"))
+                .andExpect(jsonPath("$.items[0].recommendable").value(false));
+    }
+
+    @Test
+    @DisplayName("가격 검증에는 출처와 확인일이 필요하고 검증 전 가격은 공개되지 않는다")
+    void evidenceReviewRequiresSource() throws Exception {
+        var region = regions.saveAndFlush(Region.builder().code("EVIDENCE-REGION").name("검수 지역").build());
+        var place = places.saveAndFlush(Place.builder().region(region).name("검수 장소")
+                .publishStatus(PlacePublishStatus.PUBLISHED).build());
+        jdbc.update("""
+                INSERT INTO place_price(place_id,price_kind,price_basis,amount_krw,source_kind,verification_status)
+                VALUES (?,'ADMISSION','NORMAL',12000,'TOUR_API','NEEDS_REVIEW')
+                """,place.getId());
+        long priceId=jdbc.queryForObject("SELECT MAX(price_id) FROM place_price WHERE place_id=?",Long.class,place.getId());
+        var admin=login("admin@example.com","12341234");
+        mvc.perform(get("/api/v1/admin/places/{id}/evidence",place.getId()).cookie(admin.cookies()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.prices[0].status").value("NEEDS_REVIEW"));
+        mvc.perform(patch("/api/v1/admin/places/{id}/prices/{priceId}/review",place.getId(),priceId)
+                .cookie(admin.cookies()).header(admin.header(),admin.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"VERIFIED\"}"))
+                .andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("SELECT verification_status FROM place_price WHERE price_id=?",String.class,priceId))
+                .isEqualTo("NEEDS_REVIEW");
+        jdbc.update("UPDATE place_price SET source_url='https://example.com/price',checked_at='2026-11-24 09:00:00' WHERE price_id=?",priceId);
+        mvc.perform(patch("/api/v1/admin/places/{id}/prices/{priceId}/review",place.getId(),priceId)
+                .cookie(admin.cookies()).header(admin.header(),admin.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"VERIFIED\"}"))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/v1/admin/places/{id}/evidence",place.getId()).cookie(admin.cookies()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.prices[0].status").value("VERIFIED"));
+    }
+
+    @Test
+    @DisplayName("입수 허용 사실은 공식 출처와 적용 기간 없이는 검증할 수 없다")
+    void snorkelingPermissionNeedsOfficialValidity() throws Exception {
+        var region=regions.saveAndFlush(Region.builder().code("SAFETY-REGION").name("안전 검수 지역").build());
+        var place=places.saveAndFlush(Place.builder().region(region).name("안전 검수 장소").build());
+        jdbc.update("""
+                INSERT INTO place_detail_fact(place_id,field_key,value_json,source_kind,source_url,checked_at)
+                VALUES (?,'snorkelingSafety','{"entryStatus":"ALLOWED"}','TOUR_API',
+                        'https://example.com/safety','2026-11-24 09:00:00')
+                """,place.getId());
+        long factId=jdbc.queryForObject("SELECT MAX(fact_id) FROM place_detail_fact WHERE place_id=?",Long.class,place.getId());
+        var admin=login("admin@example.com","12341234");
+        mvc.perform(patch("/api/v1/admin/places/{id}/facts/{factId}/review",place.getId(),factId)
+                .cookie(admin.cookies()).header(admin.header(),admin.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"VERIFIED\"}"))
+                .andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("SELECT verification_status FROM place_detail_fact WHERE fact_id=?",String.class,factId))
+                .isEqualTo("NEEDS_REVIEW");
+    }
+
+    @Test
+    @DisplayName("가격과 안전정보를 추가하면 공개되지 않는 검수 후보로 저장한다")
+    void adminCreatesEvidenceAsPending() throws Exception {
+        var region=regions.saveAndFlush(Region.builder().code("DRAFT-EVIDENCE").name("후보 지역").build());
+        var place=places.saveAndFlush(Place.builder().region(region).name("후보 장소").build());
+        var admin=login("admin@example.com","12341234");
+        mvc.perform(post("/api/v1/admin/places/{id}/prices",place.getId()).cookie(admin.cookies())
+                .header(admin.header(),admin.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"priceKind":"ADMISSION","ticketName":"종일권","amountKrw":12000,
+                         "freeOfCharge":false,"sourceKind":"OFFICIAL_WEBSITE",
+                         "sourceUrl":"https://example.com/price","checkedAt":"2026-11-24T09:00:00"}
+                        """))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/api/v1/admin/places/{id}/facts",place.getId()).cookie(admin.cookies())
+                .header(admin.header(),admin.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"fieldKey":"snorkelingSafety","valueJson":"{\\\"entryStatus\\\":\\\"UNKNOWN\\\"}",
+                         "sourceKind":"OFFICIAL_WEBSITE","sourceUrl":"https://example.com/safety",
+                         "checkedAt":"2026-11-24T09:00:00"}
+                        """))
+                .andExpect(status().isCreated());
+        mvc.perform(get("/api/v1/admin/places/{id}/evidence",place.getId()).cookie(admin.cookies()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.prices[0].status").value("NEEDS_REVIEW"))
+                .andExpect(jsonPath("$.facts[0].status").value("NEEDS_REVIEW"));
+    }
+
+    @Test
+    @DisplayName("운영자는 장소 정보를 수정할 수 있고 검증 근거가 없는 장소는 공개할 수 없다")
+    void adminEditsPlaceButCannotPublishWithoutEvidence() throws Exception {
+        var region=regions.saveAndFlush(Region.builder().code("EDIT-REGION").name("수정 지역").build());
+        var place=places.saveAndFlush(Place.builder().region(region).name("수정 전").build());
+        var admin=login("admin@example.com","12341234");
+        mvc.perform(patch("/api/v1/admin/places/{id}",place.getId()).cookie(admin.cookies())
+                .header(admin.header(),admin.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"수정 후\",\"address\":\"확인한 주소\",\"description\":\"소개\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("수정 후"));
+        mvc.perform(patch("/api/v1/admin/places/{id}/visibility",place.getId()).cookie(admin.cookies())
+                .header(admin.header(),admin.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"PUBLISHED\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/places/{id}",place.getId())).andExpect(status().isNotFound());
+    }
+
+    @Test
     @DisplayName("운영자가 등록한 장소 초안은 운영자 상세에서만 조회할 수 있다")
     void adminCreatesPrivateDraft() throws Exception {
         long regionId = regions.saveAndFlush(Region.builder().code("ADMIN-TEST").name("관리자 테스트 지역").build()).getId();
         var admin = login("admin@example.com", "12341234");
 
-        var created = mvc.perform(post("/api/v1/admin/places").session(admin.session())
+        var created = mvc.perform(post("/api/v1/admin/places").cookie(admin.cookies())
                         .header(admin.header(), admin.token()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"regionId":%d,"name":"관리자 등록 장소","address":"테스트 주소",
@@ -101,9 +214,9 @@ class AdminPlaceApiTests {
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("DRAFT")).andReturn();
         Number placeId = JsonPath.parse(created.getResponse().getContentAsString()).read("$.id");
 
-        mvc.perform(get("/api/v1/admin/places").session(admin.session()))
+        mvc.perform(get("/api/v1/admin/places").cookie(admin.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].name").value("관리자 등록 장소"));
-        mvc.perform(get("/api/v1/admin/places/{id}", placeId).session(admin.session()))
+        mvc.perform(get("/api/v1/admin/places/{id}", placeId).cookie(admin.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.description").value("검토 전 초안"))
                 .andExpect(jsonPath("$.activities").isEmpty()).andExpect(jsonPath("$.sources").isEmpty());
         mvc.perform(get("/api/v1/places").param("query", "관리자 등록 장소"))
@@ -123,29 +236,29 @@ class AdminPlaceApiTests {
                 .publishStatus(PlacePublishStatus.HIDDEN).build());
         var admin = login("admin@example.com", "12341234");
 
-        mvc.perform(get("/api/v1/admin/places").param("status", "DRAFT").session(admin.session()))
+        mvc.perform(get("/api/v1/admin/places").param("status", "DRAFT").cookie(admin.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.page").value(0))
                 .andExpect(jsonPath("$.size").value(20)).andExpect(jsonPath("$.totalElements").value(2))
                 .andExpect(jsonPath("$.items.length()").value(2))
                 .andExpect(jsonPath("$.items[0].id").value(second.getId()))
                 .andExpect(jsonPath("$.items[0].status").value("DRAFT"));
         mvc.perform(get("/api/v1/admin/places").param("status", "DRAFT").param("page", "1").param("size", "1")
-                        .session(admin.session()))
+                        .cookie(admin.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.page").value(1))
                 .andExpect(jsonPath("$.size").value(1)).andExpect(jsonPath("$.totalElements").value(2))
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].id").value(first.getId()));
         mvc.perform(get("/api/v1/admin/places").param("query", " review_ ").param("status", "DRAFT")
-                        .session(admin.session()))
+                        .cookie(admin.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.items[0].id").value(second.getId()));
-        mvc.perform(get("/api/v1/admin/places").param("query", "Review_3").session(admin.session()))
+        mvc.perform(get("/api/v1/admin/places").param("query", "Review_3").cookie(admin.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.items[0].status").value("PUBLISHED"));
-        mvc.perform(get("/api/v1/admin/places").param("query", "review%").session(admin.session()))
+        mvc.perform(get("/api/v1/admin/places").param("query", "review%").cookie(admin.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0))
                 .andExpect(jsonPath("$.items").isEmpty());
-        mvc.perform(get("/api/v1/admin/places").param("size", "51").session(admin.session()))
+        mvc.perform(get("/api/v1/admin/places").param("size", "51").cookie(admin.cookies()))
                 .andExpect(status().isBadRequest());
     }
 
@@ -172,7 +285,7 @@ class AdminPlaceApiTests {
         entityManager.clear();
         var admin = login("admin@example.com", "12341234");
 
-        mvc.perform(get("/api/v1/admin/places/{id}", place.getId()).session(admin.session()))
+        mvc.perform(get("/api/v1/admin/places/{id}", place.getId()).cookie(admin.cookies()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(place.getId()))
                 .andExpect(jsonPath("$.name").value("수집된 검수 전 장소"))
@@ -194,7 +307,7 @@ class AdminPlaceApiTests {
                 .andExpect(jsonPath("$.sources[1].url").value("https://example.com/tour-api"))
                 .andExpect(jsonPath("$.sources[1].type").value("TOUR_API"))
                 .andExpect(jsonPath("$.sources[1].verifiedAt").doesNotExist());
-        mvc.perform(get("/api/v1/admin/places/{id}", Long.MAX_VALUE).session(admin.session()))
+        mvc.perform(get("/api/v1/admin/places/{id}", Long.MAX_VALUE).cookie(admin.cookies()))
                 .andExpect(status().isNotFound());
     }
 
@@ -206,24 +319,15 @@ class AdminPlaceApiTests {
         guest.andExpect(status().isUnauthorized());
         mvc.perform(get("/api/v1/admin/places").param("status", "DRAFT")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/v1/admin/places/{id}", place.getId())).andExpect(status().isUnauthorized());
-        var csrf = mvc.perform(get("/api/v1/auth/csrf")).andReturn();
-        var session = (MockHttpSession) csrf.getRequest().getSession(false);
-        var json = JsonPath.parse(csrf.getResponse().getContentAsString());
-        mvc.perform(post("/api/v1/auth/signup").session(session)
-                        .header(json.<String>read("$.headerName"), json.<String>read("$.token"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"place-user@example.com","password":"password123","nickname":"회원"}
-                                """))
-                .andExpect(status().isCreated());
+        AuthTestClient.create(mvc).signup("place-user@example.com", "password123", "회원");
         var member = login("place-user@example.com", "password123");
-        mvc.perform(get("/api/v1/admin/dashboard").session(member.session()))
+        mvc.perform(get("/api/v1/admin/dashboard").cookie(member.cookies()))
                 .andExpect(status().isForbidden());
-        mvc.perform(get("/api/v1/admin/places").param("status", "DRAFT").session(member.session()))
+        mvc.perform(get("/api/v1/admin/places").param("status", "DRAFT").cookie(member.cookies()))
                 .andExpect(status().isForbidden());
-        mvc.perform(get("/api/v1/admin/places/{id}", place.getId()).session(member.session()))
+        mvc.perform(get("/api/v1/admin/places/{id}", place.getId()).cookie(member.cookies()))
                 .andExpect(status().isForbidden());
-        mvc.perform(post("/api/v1/admin/places").session(member.session())
+        mvc.perform(post("/api/v1/admin/places").cookie(member.cookies())
                         .header(member.header(), member.token()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"regionId":1,"name":"허용 안 됨","address":"주소",
@@ -241,7 +345,7 @@ class AdminPlaceApiTests {
         var admin = login("admin@example.com", "12341234");
         String path = noticePath(place.getId());
 
-        var created = mvc.perform(post(path).session(admin.session()).header(admin.header(), admin.token())
+        var created = mvc.perform(post(path).cookie(admin.cookies()).header(admin.header(), admin.token())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"휴무 안내","content":"초안 내용","validFrom":"2026-11-23T09:00:00",
@@ -267,7 +371,7 @@ class AdminPlaceApiTests {
                 .andExpect(jsonPath("$.sources.length()").value(1))
                 .andExpect(jsonPath("$.sources[0].sourceRecordId").value(existingSource.getId().intValue()));
 
-        mvc.perform(patch(path + "/" + noticeId).session(admin.session()).header(admin.header(), admin.token())
+        mvc.perform(patch(path + "/" + noticeId).cookie(admin.cookies()).header(admin.header(), admin.token())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(noticeBody("수정한 휴무 안내", existingSource.getId())))
                 .andExpect(status().isOk())
@@ -278,7 +382,7 @@ class AdminPlaceApiTests {
         entityManager.flush();
         entityManager.clear();
 
-        mvc.perform(get(path).session(admin.session()))
+        mvc.perform(get(path).cookie(admin.cookies()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page").value(0))
                 .andExpect(jsonPath("$.size").value(20))
@@ -286,7 +390,7 @@ class AdminPlaceApiTests {
                 .andExpect(jsonPath("$.items[0].placeNoticeId").value(noticeId.intValue()))
                 .andExpect(jsonPath("$.items[0].title").value("수정한 휴무 안내"))
                 .andExpect(jsonPath("$.items[0].source.url").value("https://example.com/place"));
-        mvc.perform(get(noticePath(otherPlace.getId())).session(admin.session()))
+        mvc.perform(get(noticePath(otherPlace.getId())).cookie(admin.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
     }
 
@@ -300,19 +404,19 @@ class AdminPlaceApiTests {
         var admin = login("admin@example.com", "12341234");
         String path = noticePath(place.getId());
 
-        mvc.perform(get(path).session(admin.session()).param("size", "1"))
+        mvc.perform(get(path).cookie(admin.cookies()).param("size", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].placeNoticeId").value(last.getId().intValue()))
                 .andExpect(jsonPath("$.items[0].publishStatus").value("PUBLISHED"))
                 .andExpect(jsonPath("$.totalElements").value(2));
-        mvc.perform(get(path).session(admin.session()).param("page", "1").param("size", "1"))
+        mvc.perform(get(path).cookie(admin.cookies()).param("page", "1").param("size", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].placeNoticeId").value(first.getId().intValue()));
-        mvc.perform(get(path).session(admin.session()).param("size", "51"))
+        mvc.perform(get(path).cookie(admin.cookies()).param("size", "51"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors[0].field").value("size"));
-        mvc.perform(get(noticePath(Long.MAX_VALUE)).session(admin.session()))
+        mvc.perform(get(noticePath(Long.MAX_VALUE)).cookie(admin.cookies()))
                 .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("PLACE_NOT_FOUND"));
     }
 
@@ -328,20 +432,20 @@ class AdminPlaceApiTests {
         String path = noticePath(place.getId());
         String body = noticeBody("변경할 제목", otherSource.getId());
 
-        mvc.perform(post(path).session(admin.session()).header(admin.header(), admin.token())
+        mvc.perform(post(path).cookie(admin.cookies()).header(admin.header(), admin.token())
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("PLACE_NOTICE_INVALID_SOURCE"));
-        mvc.perform(patch(path + "/" + draft.getId()).session(admin.session()).header(admin.header(), admin.token())
+        mvc.perform(patch(path + "/" + draft.getId()).cookie(admin.cookies()).header(admin.header(), admin.token())
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("PLACE_NOTICE_INVALID_SOURCE"));
         mvc.perform(patch(noticePath(otherPlace.getId()) + "/" + draft.getId())
-                        .session(admin.session()).header(admin.header(), admin.token())
+                        .cookie(admin.cookies()).header(admin.header(), admin.token())
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PLACE_NOTICE_NOT_FOUND"));
-        mvc.perform(get(path).session(admin.session()))
+        mvc.perform(get(path).cookie(admin.cookies()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.items[0].title").value("원래 제목"));
@@ -355,7 +459,7 @@ class AdminPlaceApiTests {
         var admin = login("admin@example.com", "12341234");
         String path = noticePath(place.getId());
 
-        mvc.perform(post(path).session(admin.session()).header(admin.header(), admin.token())
+        mvc.perform(post(path).cookie(admin.cookies()).header(admin.header(), admin.token())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"유효기간이 잘못된 공지","content":"본문","sourceRecordId":%d,
@@ -376,7 +480,7 @@ class AdminPlaceApiTests {
         String path = noticePath(place.getId()) + "/" + draft.getId();
         assertThat(eventIds(draft.getId())).isEmpty();
 
-        mvc.perform(patch(path).param("publish", "true").session(admin.session())
+        mvc.perform(patch(path).param("publish", "true").cookie(admin.cookies())
                         .header(admin.header(), admin.token()).contentType(MediaType.APPLICATION_JSON)
                         .content(noticeBody("처음 공개한 공지", source.getId())))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.publishStatus").value("PUBLISHED"));
@@ -391,11 +495,11 @@ class AdminPlaceApiTests {
         mvc.perform(get("/api/v1/places/{id}", place.getId()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.notices[0].title").value("처음 공개한 공지"));
 
-        mvc.perform(patch(path).param("publish", "true").session(admin.session())
+        mvc.perform(patch(path).param("publish", "true").cookie(admin.cookies())
                         .header(admin.header(), admin.token()).contentType(MediaType.APPLICATION_JSON)
                         .content(noticeBody("다시 도착한 공개 요청", source.getId())))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.title").value("처음 공개한 공지"));
-        mvc.perform(patch(path).session(admin.session()).header(admin.header(), admin.token())
+        mvc.perform(patch(path).cookie(admin.cookies()).header(admin.header(), admin.token())
                         .contentType(MediaType.APPLICATION_JSON).content(noticeBody("수정한 공개 공지", source.getId())))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.title").value("수정한 공개 공지"))
                 .andExpect(jsonPath("$.publishStatus").value("PUBLISHED"));
@@ -429,7 +533,7 @@ class AdminPlaceApiTests {
         var admin = login("admin@example.com", "12341234");
 
         mvc.perform(patch(noticePath(place.getId()) + "/" + draft.getId()).param("publish", "true")
-                        .session(admin.session()).header(admin.header(), admin.token()).contentType(MediaType.APPLICATION_JSON)
+                        .cookie(admin.cookies()).header(admin.header(), admin.token()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"공지","content":"본문","sourceRecordId":%d,"validFrom":"%s"}
                                 """.formatted(source.getId(), validFrom)))
@@ -480,7 +584,7 @@ class AdminPlaceApiTests {
         assertThat(eventIds(noticeId)).hasSize(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM source_record WHERE place_id = ?", Long.class, place.getId()))
                 .isEqualTo(1L);
-        mvc.perform(get(path).session(firstAdmin.session()))
+        mvc.perform(get(path).cookie(firstAdmin.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1));
         mvc.perform(get("/api/v1/places/{id}", place.getId()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.notices[0].placeNoticeId").value(noticeId))
@@ -498,7 +602,7 @@ class AdminPlaceApiTests {
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        mvc.perform(patch(path).param("publish", "true").session(admin.session())
+        mvc.perform(patch(path).param("publish", "true").cookie(admin.cookies())
                         .header(admin.header(), admin.token()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"공개 실패 후 저장되면 안 되는 제목","content":"본문",
@@ -537,20 +641,20 @@ class AdminPlaceApiTests {
         var admin = login("admin@example.com", "12341234");
         String path = noticePath(place.getId());
 
-        mvc.perform(post(path).session(admin.session()).header(admin.header(), admin.token())
+        mvc.perform(post(path).cookie(admin.cookies()).header(admin.header(), admin.token())
                         .contentType(MediaType.APPLICATION_JSON).content("""
                                 {"title":"출처 없는 공지","content":"본문"}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors[0].field").value("sourceSelectionValid"));
-        mvc.perform(post(path).session(admin.session()).header(admin.header(), admin.token())
+        mvc.perform(post(path).cookie(admin.cookies()).header(admin.header(), admin.token())
                         .contentType(MediaType.APPLICATION_JSON).content("""
                                 {"title":"출처 중복 공지","content":"본문","sourceRecordId":%d,
                                  "source":{"url":"https://example.com/notice","verifiedAt":"2026-11-22T00:00:00"}}
                                 """.formatted(source.getId())))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors[0].field").value("sourceSelectionValid"));
-        mvc.perform(post(path).session(admin.session()).header(admin.header(), admin.token())
+        mvc.perform(post(path).cookie(admin.cookies()).header(admin.header(), admin.token())
                         .contentType(MediaType.APPLICATION_JSON).content("""
                                 {"title":"잘못된 출처 공지","content":"본문",
                                  "source":{"url":"file:///notice","verifiedAt":"2026-11-22T00:00:00"}}
@@ -567,36 +671,41 @@ class AdminPlaceApiTests {
         var draft = saveNotice(place, source, "운영자 공지", PlacePublishStatus.DRAFT);
         String path = noticePath(place.getId());
         String body = noticeBody("권한 없는 수정", source.getId());
-        var csrf = mvc.perform(get("/api/v1/auth/csrf")).andReturn();
-        var session = (MockHttpSession) csrf.getRequest().getSession(false);
-        var json = JsonPath.parse(csrf.getResponse().getContentAsString());
-        mvc.perform(post("/api/v1/auth/signup").session(session)
-                        .header(json.<String>read("$.headerName"), json.<String>read("$.token"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"notice-user@example.com","password":"password123","nickname":"공지 회원"}
-                                """))
-                .andExpect(status().isCreated());
+        AuthTestClient.create(mvc).signup("notice-user@example.com", "password123", "공지 회원");
         var member = login("notice-user@example.com", "password123");
 
         mvc.perform(get(path)).andExpect(status().isUnauthorized());
-        mvc.perform(get(path).session(member.session())).andExpect(status().isForbidden());
-        mvc.perform(post(path).session(member.session()).header(member.header(), member.token())
+        mvc.perform(get(path).cookie(member.cookies())).andExpect(status().isForbidden());
+        mvc.perform(post(path).cookie(member.cookies()).header(member.header(), member.token())
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isForbidden());
-        mvc.perform(patch(path + "/" + draft.getId()).session(member.session()).header(member.header(), member.token())
+        mvc.perform(patch(path + "/" + draft.getId()).cookie(member.cookies()).header(member.header(), member.token())
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isForbidden());
         mvc.perform(visibilityRequest(path + "/" + draft.getId(), true, member)).andExpect(status().isForbidden());
     }
 
-    private MockHttpServletRequestBuilder visibilityRequest(String noticePath, boolean visible, Login login) {
-        return patch(noticePath + "/visibility").session(login.session()).header(login.header(), login.token())
+
+    @Test
+    @DisplayName("운영자 역할이 변경되면 기존 인증 쿠키로 운영 데이터를 조회할 수 없다")
+    void currentRoleIsCheckedDespiteExistingToken() throws Exception {
+        var admin = login("admin@example.com", "12341234");
+        jdbc.update("UPDATE `user` SET role = 'USER' WHERE email = ?", "admin@example.com");
+        entityManager.clear();
+
+        mvc.perform(get("/api/v1/admin/dashboard").cookie(admin.cookies()))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/admin/places").cookie(admin.cookies()))
+                .andExpect(status().isForbidden());
+    }
+
+    private MockHttpServletRequestBuilder visibilityRequest(String noticePath, boolean visible, AuthTestClient login) {
+        return patch(noticePath + "/visibility").cookie(login.cookies()).header(login.header(), login.token())
                 .contentType(MediaType.APPLICATION_JSON).content("{\"visible\":" + visible + "}");
     }
 
-    private MockHttpServletRequestBuilder directPublicationRequest(String path, Login login) {
-        return post(path).param("publish", "true").session(login.session()).header(login.header(), login.token())
+    private MockHttpServletRequestBuilder directPublicationRequest(String path, AuthTestClient login) {
+        return post(path).param("publish", "true").cookie(login.cookies()).header(login.header(), login.token())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"title":"즉시 공개 공지","content":"본문",
@@ -634,8 +743,15 @@ class AdminPlaceApiTests {
 
     private Place publishedPlace(String name) {
         var region = regions.save(Region.builder().name("공지 테스트 지역").build());
-        return places.saveAndFlush(Place.builder().region(region).name(name)
+        var place = places.saveAndFlush(Place.builder().region(region).name(name)
                 .publishStatus(PlacePublishStatus.PUBLISHED).build());
+        var category = ActivityCategory.builder().name("스키").build();
+        entityManager.persist(category);
+        var type = ActivityType.builder().category(category).name("스키").build();
+        entityManager.persist(type);
+        entityManager.persist(PlaceActivity.builder().place(place).activityType(type).environmentType("OUTDOOR").build());
+        entityManager.flush();
+        return place;
     }
 
     private SourceRecord sourceFor(Place place) {
@@ -659,20 +775,9 @@ class AdminPlaceApiTests {
                 """.formatted(title, sourceId);
     }
 
-    private Login login(String email, String password) throws Exception {
-        var csrf = mvc.perform(get("/api/v1/auth/csrf")).andReturn();
-        var session = (MockHttpSession) csrf.getRequest().getSession(false);
-        var json = JsonPath.parse(csrf.getResponse().getContentAsString());
-        String header = json.read("$.headerName");
-        String token = json.read("$.token");
-        mvc.perform(post("/api/v1/auth/login").session(session).header(header, token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"%s","password":"%s"}
-                                """.formatted(email, password)))
-                .andExpect(status().isOk());
-        return new Login(session, header, token);
+    private AuthTestClient login(String email, String password) throws Exception {
+        var client = AuthTestClient.create(mvc);
+        client.login(email, password);
+        return client;
     }
-
-    private record Login(MockHttpSession session, String header, String token) {}
 }

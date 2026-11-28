@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type InternalAxiosRequestConfig } from 'axios';
 import { toApiError } from './apiError';
 
 const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -14,15 +14,46 @@ if (baseURL !== '/') {
   }
 }
 
-/** 도메인 API 함수가 공유하는 클라이언트입니다. 인증 갱신·재시도·화면 이동은 담당하지 않습니다. */
+/** 도메인 API 함수가 공유하는 클라이언트입니다. */
 export const apiClient = axios.create({
   baseURL,
   withCredentials: true,
   timeout: 10_000,
 });
 
-// 성공 응답은 Axios 형태를 유지하고, 실패만 공통 오류로 변환합니다.
+type RetryConfig = InternalAxiosRequestConfig & { _authRetried?: boolean };
+let refreshInFlight: Promise<void> | null = null;
+const authBase = baseURL === '/' ? '' : baseURL.replace(/\/$/, '');
+
+async function refreshAccess(): Promise<void> {
+  const { data } = await axios.get<{ token: string; headerName: string }>(`${authBase}/api/v1/auth/csrf`, {
+    withCredentials: true,
+    timeout: 10_000,
+  });
+  await axios.post(`${authBase}/api/v1/auth/refresh`, undefined, {
+    withCredentials: true,
+    timeout: 10_000,
+    headers: { [data.headerName]: data.token },
+  });
+}
+
 apiClient.interceptors.response.use(
   response => response,
-  (error: unknown) => Promise.reject(toApiError(error))
+  async (error: unknown) => {
+    if (axios.isAxiosError(error) && error.response?.status === 401 && error.config) {
+      const config = error.config as RetryConfig;
+      const path = config.url ?? '';
+      if (!config._authRetried && !path.includes('/auth/')) {
+        config._authRetried = true;
+        refreshInFlight ??= refreshAccess().finally(() => { refreshInFlight = null; });
+        try {
+          await refreshInFlight;
+        } catch {
+          return Promise.reject(toApiError(error));
+        }
+        return apiClient.request(config);
+      }
+    }
+    return Promise.reject(toApiError(error));
+  }
 );

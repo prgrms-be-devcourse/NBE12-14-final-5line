@@ -19,15 +19,17 @@ public class PlaceOperatingInfo {
     private Long placeId;
     @MapsId @OneToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "place_id")
     private Place place;
-    @Column(name = "source_content_id", nullable = false, length = 50)
+    @Column(name = "source_content_id", length = 50)
     private String sourceContentId;
     @Column(name = "operating_hours", columnDefinition = "TEXT")
     private String operatingHours;
     @Column(name = "rest_days", columnDefinition = "TEXT")
     private String restDays;
+    @Column(name = "fee_info", columnDefinition = "TEXT")
+    private String feeInfo;
     @Column(name = "contact_phone", length = 100)
     private String contactPhone;
-    @Column(name = "source_url", nullable = false, length = 1000)
+    @Column(name = "source_url", length = 1000)
     private String sourceUrl;
     @Column(name = "collected_at", nullable = false, columnDefinition = "DATETIME")
     private LocalDateTime collectedAt;

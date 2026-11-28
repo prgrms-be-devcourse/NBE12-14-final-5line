@@ -22,8 +22,8 @@ function SearchForm({ initialQuery }: { initialQuery: string }) {
   return (
     <form
       id={placeSearchFormId}
-      className="order-3 mx-auto flex w-full items-center gap-3 rounded-[28px] border border-transparent
-        bg-[#f3f5f8] py-[5px] pr-2.5 pl-[18px] text-[#8191a7] focus-within:border-[#b8b4ff] md:order-none"
+      className="order-3 mx-auto flex w-full items-center gap-3 rounded-[28px] border border-[#e8e6f0]
+        bg-[#F5F6F8] py-[5px] pr-2.5 pl-[18px] text-[#8191a7] focus-within:border-[#b8b4ff] md:order-none"
       onSubmit={submitSearch}
       role="search"
       onReset={event => {
@@ -43,7 +43,7 @@ function SearchForm({ initialQuery }: { initialQuery: string }) {
         onChange={event => setQuery(event.target.value)}
         placeholder="어떤 장소를 찾고 있나요?"
       />
-      <button type="submit" className="shrink-0 cursor-pointer rounded-[20px] bg-white px-3.5 py-[7px] text-[12px] font-bold text-[#5147ff]">
+      <button type="submit" className="shrink-0 cursor-pointer rounded-[20px] bg-[#5942FF] px-4 py-2 text-[12px] font-semibold text-white">
         검색
       </button>
     </form>

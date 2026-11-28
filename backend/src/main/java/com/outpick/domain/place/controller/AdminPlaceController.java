@@ -1,7 +1,15 @@
 package com.outpick.domain.place.controller;
 
-import com.outpick.domain.member.security.MemberSessionPrincipal;
+import com.outpick.domain.member.security.MemberPrincipal;
 import com.outpick.domain.place.dto.AdminPlaceDetailResponse;
+import com.outpick.domain.place.dto.AdminPlaceCandidateResponse;
+import com.outpick.domain.place.dto.AdminPlaceUpdateRequest;
+import com.outpick.domain.place.dto.AdminEvidenceResponse;
+import com.outpick.domain.place.dto.AdminEvidenceReviewRequest;
+import com.outpick.domain.place.dto.AdminPriceDraftRequest;
+import com.outpick.domain.place.dto.AdminFactDraftRequest;
+import com.outpick.domain.place.service.AdminEvidenceService;
+import com.outpick.domain.place.dto.AdminPlaceVisibilityRequest;
 import com.outpick.domain.place.dto.AdminPlaceNoticePageResponse;
 import com.outpick.domain.place.dto.AdminPlaceNoticeRequest;
 import com.outpick.domain.place.dto.AdminPlaceNoticeResponse;
@@ -37,6 +45,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AdminPlaceController {
     private final AdminPlaceService service;
+    private final AdminEvidenceService evidence;
 
     @GetMapping("/dashboard")
     public Map<String, Long> dashboard(Authentication authentication) {
@@ -59,6 +68,14 @@ public class AdminPlaceController {
         return service.places(memberId(authentication), query, status, page, size);
     }
 
+    @GetMapping("/place-candidates/snorkeling")
+    public AdminPlaceCandidateResponse snorkelingCandidates(
+            @RequestParam(defaultValue = "0") @Min(0) @Max(1_000_000) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size,
+            Authentication authentication) {
+        return service.snorkelingCandidates(memberId(authentication), page, size);
+    }
+
     @GetMapping("/places/{placeId}")
     public AdminPlaceDetailResponse place(@PathVariable @Positive long placeId, Authentication authentication) {
         return service.place(memberId(authentication), placeId);
@@ -68,6 +85,51 @@ public class AdminPlaceController {
     @ResponseStatus(HttpStatus.CREATED)
     public AdminPlaceResponse create(@Valid @RequestBody AdminPlaceRequest request, Authentication authentication) {
         return service.createDraft(memberId(authentication), request);
+    }
+
+    @PatchMapping("/places/{placeId}")
+    public AdminPlaceResponse updatePlace(@PathVariable @Positive long placeId,
+            @Valid @RequestBody AdminPlaceUpdateRequest request, Authentication authentication) {
+        return service.updatePlace(memberId(authentication), placeId, request);
+    }
+
+    @PatchMapping("/places/{placeId}/visibility")
+    public AdminPlaceResponse changePlaceVisibility(@PathVariable @Positive long placeId,
+            @Valid @RequestBody AdminPlaceVisibilityRequest request, Authentication authentication) {
+        return service.changePlaceVisibility(memberId(authentication), placeId, request.status());
+    }
+
+    @GetMapping("/places/{placeId}/evidence")
+    public AdminEvidenceResponse evidence(@PathVariable @Positive long placeId, Authentication authentication) {
+        return evidence.get(memberId(authentication), placeId);
+    }
+
+    @PostMapping("/places/{placeId}/prices")
+    @ResponseStatus(HttpStatus.CREATED)
+    public void createPrice(@PathVariable @Positive long placeId,
+            @Valid @RequestBody AdminPriceDraftRequest request, Authentication authentication) {
+        evidence.createPrice(memberId(authentication), placeId, request);
+    }
+
+    @PostMapping("/places/{placeId}/facts")
+    @ResponseStatus(HttpStatus.CREATED)
+    public void createFact(@PathVariable @Positive long placeId,
+            @Valid @RequestBody AdminFactDraftRequest request, Authentication authentication) {
+        evidence.createFact(memberId(authentication), placeId, request);
+    }
+
+    @PatchMapping("/places/{placeId}/prices/{priceId}/review")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reviewPrice(@PathVariable @Positive long placeId, @PathVariable @Positive long priceId,
+            @Valid @RequestBody AdminEvidenceReviewRequest request, Authentication authentication) {
+        evidence.reviewPrice(memberId(authentication), placeId, priceId, request.status());
+    }
+
+    @PatchMapping("/places/{placeId}/facts/{factId}/review")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reviewFact(@PathVariable @Positive long placeId, @PathVariable @Positive long factId,
+            @Valid @RequestBody AdminEvidenceReviewRequest request, Authentication authentication) {
+        evidence.reviewFact(memberId(authentication), placeId, factId, request.status());
     }
 
     @GetMapping("/places/{placeId}/notices")
@@ -105,6 +167,6 @@ public class AdminPlaceController {
     }
 
     private long memberId(Authentication authentication) {
-        return ((MemberSessionPrincipal) authentication.getPrincipal()).memberId();
+        return ((MemberPrincipal) authentication.getPrincipal()).memberId();
     }
 }

@@ -86,12 +86,14 @@ class PlaceDetailApiTests {
         draft = persist(Place.builder().region(region).name("검수 전").build());
         hidden = persist(Place.builder().region(region).name("비공개").publishStatus(PlacePublishStatus.HIDDEN).build());
         empty = persist(Place.builder().region(region).name("기본 정보만").publishStatus(PlacePublishStatus.PUBLISHED).build());
-        var category = persist(ActivityCategory.builder().name("테스트 분류").build());
+        var category = persist(ActivityCategory.builder().name("스키").build());
         var ski = activity(category, "스키", "OUTDOOR");
         persist(PlaceActivitySeason.builder().placeActivity(ski).season("WINTER").build());
         persist(PlaceActivitySeason.builder().placeActivity(ski).season("SUMMER").build());
-        activity(category, "보드", "OUTDOOR");
-        var climb = activity(category, "클라이밍", "INDOOR");
+        var sledCategory = persist(ActivityCategory.builder().name("눈썰매").build());
+        var iceCategory = persist(ActivityCategory.builder().name("아이스스케이팅").build());
+        activity(sledCategory, "눈썰매", "OUTDOOR");
+        var climb = activity(iceCategory, "아이스스케이팅", "INDOOR");
         persist(PlaceActivitySeason.builder().placeActivity(climb).season("WINTER").build());
         var verified = persist(SourceRecord.builder().place(published).type("OFFICIAL")
                 .url("https://example.com/info").verifiedFields("address")
@@ -139,7 +141,7 @@ class PlaceDetailApiTests {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.activities", hasSize(3)))
                 .andExpect(jsonPath("$.activities[0].activityTypeName").value("스키"))
                 .andExpect(jsonPath("$.activities[0].seasons", containsInAnyOrder("SUMMER", "WINTER")))
-                .andExpect(jsonPath("$.activities[1].activityTypeName").value("보드"))
+                .andExpect(jsonPath("$.activities[1].activityTypeName").value("눈썰매"))
                 .andExpect(jsonPath("$.activities[1].seasons", hasSize(0)))
                 .andExpect(jsonPath("$.activities[2].environmentType").value("INDOOR"))
                 .andExpect(jsonPath("$.activities[2].seasons", containsInAnyOrder("WINTER")));
@@ -177,10 +179,7 @@ class PlaceDetailApiTests {
     void returnsEmptyCollectionsWhenOptionalDataDoesNotExist() throws Exception {
         // 이 장소에는 다른 장소와 구분되는 출처만 있고 활동/공지는 없다.
         mvc.perform(get("/api/v1/places/{id}", empty.getId()))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.activities", hasSize(0)))
-                .andExpect(jsonPath("$.notices", hasSize(0)))
-                .andExpect(jsonPath("$.sources[0].url").value("https://example.com/other"))
-                .andExpect(jsonPath("$.address").value(nullValue()));
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -191,10 +190,7 @@ class PlaceDetailApiTests {
         em.flush();
         em.clear();
         mvc.perform(get("/api/v1/places/{id}", basic.getId()))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("연관 정보 없음"))
-                .andExpect(jsonPath("$.activities", hasSize(0)))
-                .andExpect(jsonPath("$.notices", hasSize(0)))
-                .andExpect(jsonPath("$.sources", hasSize(0)));
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -299,7 +295,7 @@ class PlaceDetailApiTests {
         stats.clear();
         mvc.perform(get("/api/v1/places/{id}", published.getId())).andExpect(status().isOk());
         assertThat(stats.getPrepareStatementCount()).isEqualTo(5);
-        var category = persist(ActivityCategory.builder().name("추가 분류").build());
+        var category = persist(ActivityCategory.builder().name("스키").build());
         for (int i = 0; i < 20; i++) {
             var activity = activity(category, "추가 종목 " + i, "OUTDOOR");
             persist(PlaceActivitySeason.builder().placeActivity(activity).season("WINTER").build());
@@ -308,7 +304,7 @@ class PlaceDetailApiTests {
         em.clear();
         stats.clear();
         mvc.perform(get("/api/v1/places/{id}", published.getId()))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.activities", hasSize(23)));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.activities", hasSize(3)));
         assertThat(stats.getPrepareStatementCount()).isEqualTo(5);
     }
 

@@ -7,7 +7,7 @@ export function getListReturnUrl(value: string | null) {
   try {
     const url = new URL(value, 'https://outpick.invalid');
     const query = url.searchParams.toString();
-    return url.origin === 'https://outpick.invalid' && url.pathname === '/'
+    return url.origin === 'https://outpick.invalid' && ['/', '/explore', '/explore/'].includes(url.pathname)
       ? `${url.pathname}${query ? `?${query}` : ''}${url.hash}`
       : '/';
   } catch {

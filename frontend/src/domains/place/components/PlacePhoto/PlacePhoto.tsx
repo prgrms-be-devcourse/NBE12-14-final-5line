@@ -17,9 +17,9 @@ export function getPlacePhoto(place: PlaceSummary) {
   } catch { return null; }
 }
 
-function RemotePlacePhoto({ url, name }: { url: string; name: string }) {
+function RemotePlacePhoto({ url, name, artwork }: { url: string; name: string; artwork: 'snow' | 'water' | 'forest' | 'indoor' }) {
   const [failed, setFailed] = useState(false);
-  if (failed) return <PlaceArtwork artwork="forest" />;
+  if (failed) return <PlaceArtwork artwork={artwork} />;
   return <div className="aspect-[1.65] w-full overflow-hidden bg-[#f1f3f6]">
     {/* 원본을 변환·자르지 않고 표시한다. 변경금지 사진에도 동일하게 적용한다. */}
     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -27,9 +27,10 @@ function RemotePlacePhoto({ url, name }: { url: string; name: string }) {
   </div>;
 }
 
-export default function PlacePhoto({ place }: { place: PlaceSummary }) {
+export default function PlacePhoto({ place, category = '' }: { place: PlaceSummary; category?: string }) {
+  const artwork = /해수욕|스노클|워터/.test(category) ? 'water' : /스키|썰매/.test(category) ? 'snow' : /아이스/.test(category) ? 'indoor' : 'forest';
   const photo = getPlacePhoto(place);
-  return photo ? <RemotePlacePhoto key={photo.url} url={photo.url} name={place.name ?? '장소'} /> : <PlaceArtwork artwork="forest" />;
+  return photo ? <RemotePlacePhoto key={photo.url} url={photo.url} name={place.name ?? '장소'} artwork={artwork} /> : <PlaceArtwork artwork={artwork} />;
 }
 
 /** 카드 선택 버튼 밖에 배치해 링크를 중첩하지 않는다. */

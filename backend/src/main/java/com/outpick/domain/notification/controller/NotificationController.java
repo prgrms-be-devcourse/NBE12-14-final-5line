@@ -1,6 +1,6 @@
 package com.outpick.domain.notification.controller;
 
-import com.outpick.domain.member.security.MemberSessionPrincipal;
+import com.outpick.domain.member.security.MemberPrincipal;
 import com.outpick.domain.notification.dto.NotificationBulkReadResponse;
 import com.outpick.domain.notification.dto.NotificationPageResponse;
 import com.outpick.domain.notification.dto.NotificationReadResponse;
@@ -30,26 +30,26 @@ public class NotificationController {
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size,
             @RequestParam(defaultValue = "false") boolean unreadOnly,
             Authentication authentication) {
-        var principal = (MemberSessionPrincipal) authentication.getPrincipal();
+        var principal = (MemberPrincipal) authentication.getPrincipal();
         return notificationInboxService.findMyNotifications(principal.memberId(), page, size, unreadOnly);
     }
 
     @PatchMapping("/{notificationId}/read")
     public NotificationReadResponse markMyNotificationRead(
             @PathVariable @Positive long notificationId, Authentication authentication) {
-        var principal = (MemberSessionPrincipal) authentication.getPrincipal();
+        var principal = (MemberPrincipal) authentication.getPrincipal();
         return notificationInboxService.markMyNotificationRead(principal.memberId(), notificationId);
     }
 
     @PatchMapping("/read-all")
     public NotificationBulkReadResponse markAllMyNotificationsRead(Authentication authentication) {
-        var principal = (MemberSessionPrincipal) authentication.getPrincipal();
+        var principal = (MemberPrincipal) authentication.getPrincipal();
         return notificationInboxService.markAllMyNotificationsRead(principal.memberId());
     }
 
     @GetMapping("/unread-status")
     public NotificationUnreadStatusResponse getMyUnreadStatus(Authentication authentication) {
-        var principal = (MemberSessionPrincipal) authentication.getPrincipal();
+        var principal = (MemberPrincipal) authentication.getPrincipal();
         return notificationInboxService.getMyUnreadStatus(principal.memberId());
     }
 }

@@ -25,14 +25,28 @@ public class PlaceDetailRepository {
         return entityManager.createQuery("""
                 select p from Place p left join fetch p.representativeImage left join fetch p.operatingInfo
                 where p.id = :id and p.publishStatus = :published
+                  and exists (select a.id from PlaceActivity a where a.place = p
+                    and a.activityType.category.name in :categories
+                    and a.activityType.name in :types
+)
                 """, Place.class)
                 .setParameter("id", placeId).setParameter("published", PlacePublishStatus.PUBLISHED)
+                .setParameter("categories", com.outpick.domain.place.service.PlaceFilterService.PUBLIC_CATEGORIES)
+                .setParameter("types", com.outpick.domain.place.service.PlaceFilterService.PUBLIC_ACTIVITY_TYPES)
                 .getResultStream().findFirst();
     }
 
     /** 종목과 시즌을 각각 한 번씩 조회해 장소 상세에 표시할 종목별 시즌 목록을 만듭니다. */
     public List<PlaceActivityResponse> findActivityResponses(long placeId) {
-        var activities = findActivities(placeId);
+        return activityResponses(placeId, false);
+    }
+
+    public List<PlaceActivityResponse> findAdminActivityResponses(long placeId) {
+        return activityResponses(placeId, true);
+    }
+
+    private List<PlaceActivityResponse> activityResponses(long placeId, boolean includeUnpublished) {
+        var activities = findActivities(placeId, includeUnpublished);
         var seasons = findSeasons(placeId).stream().collect(Collectors.groupingBy(
                 season -> season.getPlaceActivity().getId(),
                 Collectors.mapping(PlaceActivitySeason::getSeason, Collectors.toList())));
@@ -41,11 +55,17 @@ public class PlaceDetailRepository {
                 activity.getEnvironmentType(), seasons.getOrDefault(activity.getId(), List.of()))).toList();
     }
 
-    private List<PlaceActivity> findActivities(long placeId) {
+    private List<PlaceActivity> findActivities(long placeId, boolean includeUnpublished) {
         return entityManager.createQuery("""
                 select a from PlaceActivity a join fetch a.activityType
-                where a.place.id = :id order by a.id
-                """, PlaceActivity.class).setParameter("id", placeId).getResultList();
+                where a.place.id = :id and (:includeUnpublished = true or
+                  (a.activityType.category.name in :categories and a.activityType.name in :types))
+                order by a.id
+                """, PlaceActivity.class).setParameter("id", placeId)
+                .setParameter("includeUnpublished", includeUnpublished)
+                .setParameter("categories", com.outpick.domain.place.service.PlaceFilterService.PUBLIC_CATEGORIES)
+                .setParameter("types", com.outpick.domain.place.service.PlaceFilterService.PUBLIC_ACTIVITY_TYPES)
+                .getResultList();
     }
 
     private List<PlaceActivitySeason> findSeasons(long placeId) {

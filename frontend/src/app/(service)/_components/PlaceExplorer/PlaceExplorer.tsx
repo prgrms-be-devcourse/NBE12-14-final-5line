@@ -1,11 +1,16 @@
 'use client';
 
 import Link from 'next/link';
+import FavoritePlaceButton from '../../places/detail/_components/FavoritePlaceButton';
+import { Home, Bookmark, Map as MapIcon, List, Compass, Footprints, Umbrella, Fish, Waves, Flag, Mountain, Snowflake } from 'lucide-react';
+import PlaceCardSkeleton from './PlaceCardSkeleton';
+import MobilePlaceFilters from './MobilePlaceFilters';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { changePlaceSearchFilters, defaultFilters, placeSearchFormId, readPlaceSearchParams, seasons } from './placeSearchParams';
-import PlacePhoto, { PlacePhotoCredit } from '@/domains/place/components/PlacePhoto/PlacePhoto';
+import PlacePhoto from '@/domains/place/components/PlacePhoto/PlacePhoto';
+import { compactPlaceAddress, visibleCardPrice } from '@/domains/place/lib/placeCardDisplay';
 import CopyPlaceLinkButton from '@/domains/place/components/CopyPlaceLinkButton/CopyPlaceLinkButton';
 import KakaoPlaceMap, { mapMessageClassName, mapRetryButtonClassName } from '@/domains/place/components/KakaoPlaceMap/KakaoPlaceMap';
 import type { PlaceMapBounds, PlaceMapSelection, PlaceMapView } from '@/domains/place/types/kakaoMap.type';
@@ -17,6 +22,10 @@ import './PlaceExplorer.css';
 type MapSearch = { from: string; to: string };
 type ListWindow = { key: string; count: number; restore?: NonNullable<ReturnType<typeof takePlaceListPosition>> };
 const cardBatchSize = 10;
+function CategoryIcon({ name }: { name: string }) {
+  const Icon = name.includes('아이스') ? Footprints : name.includes('해수욕') ? Umbrella : name.includes('스노클') ? Fish : name.includes('워터') ? Waves : /루지|레일|레이싱/.test(name) ? Flag : name.includes('스키') ? Mountain : name.includes('썰매') ? Snowflake : Compass;
+  return <Icon size={23} strokeWidth={1.6} aria-hidden="true" />;
+}
 const filterLabelClassName = 'min-w-0 flex-1 md:flex-none';
 const filterSelectClassName = 'w-full cursor-pointer rounded-lg border border-[#e4e9f1] bg-white px-2 py-[9px] text-[11px] md:w-auto md:max-w-[120px] md:text-[12px]';
 const noticeClassName = 'mt-2 mb-[22px] text-[11px]/[1.7] text-[#7f8b9c]';
@@ -40,13 +49,17 @@ export default function PlaceExplorer() {
   const { query: search, category, region, season, environment, sort } = readPlaceSearchParams(searchParams);
   const [selection, setSelection] = useState<PlaceMapSelection | null>(null);
   const [mobileMap, setMobileMap] = useState(false);
+  const [sheetSize, setSheetSize] = useState(0);
+  const sheetPointerY = useRef<number | null>(null);
+  const sheetDragged = useRef(false);
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [mapSearch, setMapSearch] = useState<MapSearch | null>(null);
   const resultsPane = useRef<HTMLElement>(null);
   const placeList = useRef<HTMLUListElement>(null);
   const listEnd = useRef<HTMLDivElement>(null);
   const mapBounds = useMemo(() => readPlaceMapBounds(searchParams), [searchParams]);
   const paramsKey = searchParams.toString();
-  const listUrl = `/${paramsKey ? `?${paramsKey}` : ''}`;
+  const listUrl = `${typeof window === 'undefined' ? '/explore/' : window.location.pathname}${paramsKey ? `?${paramsKey}` : ''}`;
   const mapView = readPlaceMapParams(searchParams);
   const areaKey = mapSearchKey(searchParams);
   const activeMapSearch = mapSearch?.to === areaKey;
@@ -64,7 +77,8 @@ export default function PlaceExplorer() {
     if (latitude === null || longitude === null) return [];
     return [{ ...place, name: place.name ?? '이름 미확인', latitude, longitude }];
   }), [placeQuery.data]);
-  const places = useMemo(() => sort === 'name-desc' ? locatedPlaces.toReversed() : locatedPlaces, [locatedPlaces, sort]);
+  const allPlaces = useMemo(() => (placeQuery.data?.items ?? []).map(place => ({...place, name: place.name ?? '이름 미확인'})), [placeQuery.data]);
+  const places = sort === 'name-desc' ? allPlaces.toReversed() : allPlaces;
   const selectedIndex = places.findIndex(place => place.id === selection?.id);
   const selectedPlace = places[selectedIndex];
   const selectedCardCount = countThroughCard(selectedIndex);
@@ -187,27 +201,27 @@ export default function PlaceExplorer() {
   }
 
   return (
-    <div className="outpick-explorer bg-white text-[#16243b] md:flex md:min-h-0 md:flex-col
+    <div style={{'--sheet-height': ['110px', '46dvh', '72dvh'][sheetSize]} as React.CSSProperties} className={`outpick-explorer ${mobileMap ? 'outpick-mobileMapMode' : ''} bg-white text-[#16243b] md:flex md:min-h-0 md:flex-col
         [&_:is(a,button,input,select):focus-visible]:outline-3 [&_:is(a,button,input,select):focus-visible]:outline-offset-4
-        [&_:is(a,button,input,select):focus-visible]:outline-[#5147ff]">
+        [&_:is(a,button,input,select):focus-visible]:outline-[#5147ff]`}>
       {searchParams.has('withdrawn') && <p className="mx-9 mb-4 rounded-xl bg-[#e8f7ef] px-4 py-3 text-[14px] font-bold text-[#176547] md:shrink-0" role="status">회원 탈퇴가 완료되었습니다.</p>}
 
-      <div className="border-b border-[#e9edf3] px-5 md:flex md:shrink-0 md:flex-wrap md:justify-between md:px-6 min-[68.8125rem]:flex-nowrap min-[68.8125rem]:gap-5 min-[68.8125rem]:px-9">
-        <nav aria-label="활동 카테고리" className="flex gap-6 overflow-x-auto md:gap-[22px] min-[68.8125rem]:gap-[25px]">
+      <div className="border-b border-[#e9edf3] px-5 md:flex md:shrink-0 md:flex-wrap md:justify-between md:px-6 min-[68.8125rem]:gap-5 min-[68.8125rem]:px-9">
+        <nav aria-label="활동 카테고리" className="flex w-full gap-6 overflow-x-auto md:gap-7">
           {categories.map(item => (
             <button
               key={item}
               type="button"
-              className="shrink-0 cursor-pointer border-b-2 border-transparent py-[17px] text-[13px] font-bold text-[#617088]
+              className="flex shrink-0 cursor-pointer flex-col items-center gap-2 border-b-2 border-transparent py-4 text-[12px] font-semibold text-[#617088]
                 aria-pressed:border-[#5147ff] aria-pressed:text-[#5147ff]"
               aria-pressed={category === item}
               onClick={() => changePlaceSearchFilters({ category: item })}
             >
-              {item}
+              <CategoryIcon name={item} />{item}
             </button>
           ))}
         </nav>
-        <div className="flex items-center gap-1.5 py-3 md:gap-[7px] md:pt-0 min-[68.8125rem]:pb-0">
+        <div className="hidden items-center gap-1.5 py-3 md:flex md:gap-[7px] md:pt-0 min-[68.8125rem]:pb-3">
           <label className={filterLabelClassName}><span className="sr-only">지역</span><select className={filterSelectClassName} value={region} onChange={event => changePlaceSearchFilters({ region: event.target.value })}>
             <option value="">지역 전체</option>
             {region && !catalog.data?.regions.some(item => item.name === region) && <option value={region}>{region} (미제공)</option>}
@@ -220,21 +234,19 @@ export default function PlaceExplorer() {
             <option value="">실내외 전체</option><option>실내</option><option>실외</option>
           </select></label>
         </div>
+        <MobilePlaceFilters filters={{region,season,environment}} regions={catalog.data?.regions ?? []} seasons={seasons} onApply={changePlaceSearchFilters}/>
       </div>
 
-      <main className="md:grid md:min-h-0 md:flex-1 md:grid-cols-2 md:grid-rows-[minmax(0,1fr)]">
+      <main className="relative md:grid md:min-h-0 md:flex-1 md:grid-cols-[55fr_45fr] md:grid-rows-[minmax(0,1fr)]">
         <section
           ref={resultsPane}
           aria-labelledby="results-title"
           className={`min-w-0 px-5 pt-[27px] pb-[85px] md:overflow-y-auto md:overscroll-y-contain md:px-6 md:py-7
-            min-[68.8125rem]:p-9 min-[100rem]:px-14 min-[100rem]:py-11 ${mobileMap ? 'max-md:hidden' : ''}`}
+            min-[68.8125rem]:p-9 min-[100rem]:px-14 min-[100rem]:py-11 ${mobileMap ? 'outpick-mobileSheet' : ''}`}
         >
-          <div>
-            <p className="text-[10px] font-extrabold tracking-[1.7px] text-[#6156ff]">EXPLORE THE OUTSIDE</p>
-            <h1 id="results-title" className="mt-2.5 text-[25px]/[1.35] font-extrabold tracking-[-1.4px] md:text-[clamp(22px,2.2vw,32px)]">이번 주말, 밖에서 뭐 하지?</h1>
-            <p className="mt-3 text-xs/[1.7] text-[#778499] md:text-[13px]">마음이 향하는 활동, 나에게 맞는 장소를 찾아보세요.</p>
-          </div>
-          <div className="mt-7 flex items-center gap-[9px] text-[12px] md:gap-4">
+          {mobileMap && <button type="button" aria-label="장소 목록 시트 높이 조절" aria-expanded={sheetSize > 0} onPointerDown={event => { sheetPointerY.current=event.clientY; sheetDragged.current=false; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerUp={event => { const delta=(sheetPointerY.current ?? event.clientY)-event.clientY; sheetDragged.current=Math.abs(delta)>25; if(sheetDragged.current)setSheetSize(current=>Math.max(0,Math.min(2,current+(delta>0?1:-1)))); sheetPointerY.current=null; }} onClick={() => { if(!sheetDragged.current)setSheetSize(current=>(current+1)%3); }} onKeyDown={event => { if(event.key==='ArrowUp'||event.key==='ArrowDown'){event.preventDefault();setSheetSize(current=>Math.max(0,Math.min(2,current+(event.key==='ArrowUp'?1:-1))));} }} className="mx-auto mb-3 flex h-7 w-full touch-none flex-col items-center justify-center md:hidden"><span className="h-1 w-10 rounded-full bg-slate-300"/><span className="sr-only">접기·절반·전체 높이로 전환</span></button>}
+          <div><h1 id="results-title" className="text-[22px] font-bold tracking-tight text-[#17172B]">{category === '전체' ? '새로운 즐거움을 발견하세요' : category}</h1></div>
+          <div className="mt-4 flex items-center gap-[9px] text-[12px] md:gap-4">
             <p role="status">{loading ? '장소를 불러오고 있어요' : failed ? '조회 실패' : <>검색 결과 <strong className="text-[#5147ff]">{placeQuery.data?.totalElements ?? 0}곳</strong></>}</p>
             <label className="ml-auto"><span className="sr-only">정렬</span><select className="max-w-[115px] cursor-pointer bg-white p-2" value={sort} onChange={event => changePlaceSearchFilters({ sort: event.target.value })}>
               <option value="name">이름순</option><option value="name-desc">이름 역순</option>
@@ -245,22 +257,21 @@ export default function PlaceExplorer() {
             <CopyPlaceLinkButton label="검색 링크 복사" />
           </div>
           {places.some(place => place.name?.startsWith('[데모]')) && <p className={noticeClassName}>[데모] 표시는 가상 장소이며 실제 시설 정보가 아닙니다.</p>}
-          <p className={noticeClassName} role="status">{searchingArea ? '이 영역의 장소를 찾는 중' : '지도를 이동하면 자동 검색해요.'}</p>
-          {failed ? <div className={emptyClassName} role="alert"><h2 className={emptyHeadingClassName}>장소를 불러오지 못했어요</h2><p className={emptyTextClassName}>서버 연결을 확인하고 다시 시도해 주세요.</p><button className={emptyButtonClassName} type="button" onClick={retrySearch}>다시 시도</button></div> : loading ? <p role="status">장소 정보를 조회하고 있어요.</p> : places.length > 0 ? (
-            <ul ref={placeList} className="grid list-none grid-cols-2 gap-x-3 gap-y-4 p-0 md:gap-x-4 md:gap-y-6 min-[100rem]:gap-x-[22px] min-[100rem]:gap-y-7" aria-label="장소 목록">
+          <p className={noticeClassName} role="status">{searchingArea ? '이 영역의 장소를 찾는 중' : ''}</p>
+          {failed ? <div className={emptyClassName} role="alert"><h2 className={emptyHeadingClassName}>장소를 불러오지 못했어요</h2><p className={emptyTextClassName}>서버 연결을 확인하고 다시 시도해 주세요.</p><button className={emptyButtonClassName} type="button" onClick={retrySearch}>다시 시도</button></div> : loading ? <PlaceCardSkeleton /> : places.length > 0 ? (
+            <ul ref={placeList} className="outpick-placeGrid grid list-none gap-x-5 gap-y-7 p-0" aria-label="장소 목록">
               {places.slice(0, visibleCount).map(place => (
                 <li key={place.id} className="min-w-0">
-                  <article data-place-id={place.id} className={`outpick-placeCard flex h-full flex-col overflow-hidden rounded-[13px] border ${selectedPlace?.id === place.id ? 'outpick-placeCardSelected' : ''}`}>
-                    <button type="button" aria-pressed={selectedPlace?.id === place.id} className="w-full flex-1 cursor-pointer bg-white text-left focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#5147ff]" onClick={() => togglePlaceSelection({ id: place.id, source: 'list' })}>
-                      <PlacePhoto place={place} />
-                      <div className="p-3 min-[68.8125rem]:p-4">
-                        <p className="text-[11px] text-[#7c899d]">{place.address ?? '주소 미확인'}</p>
-                        <h2 className="mt-[5px] text-[14px] font-extrabold tracking-[-.5px] md:text-[16px]">{place.name}</h2>
+                  <article data-place-id={place.id} onMouseEnter={() => setHoveredId(place.id)} onMouseLeave={() => setHoveredId(null)} onFocus={() => setHoveredId(place.id)} onBlur={() => setHoveredId(null)} className={`outpick-placeCard group relative h-full ${selectedPlace?.id === place.id ? 'outpick-placeCardSelected' : ''}`}>
+                    <div className="absolute top-3 right-3 z-10"><FavoritePlaceButton placeId={place.id} placeName={place.name} iconOnly /></div>
+                    <Link className="block h-full text-inherit no-underline" aria-label={`${place.name} 상세 보기`} href={getPlaceDetailUrl(place.id, listUrl)} onClick={event => openPlaceDetail(event, place.id)}>
+                      <div className="outpick-cardPhoto aspect-[4/3] overflow-hidden rounded-[14px] bg-[#F5F6F8] [&>div]:h-full [&>div]:aspect-auto"><PlacePhoto place={place} category={category} /></div>
+                      <div className="pt-3">
+                        <p className="truncate text-[13px] text-[#717586]">{compactPlaceAddress(place.address)}</p>
+                        <h2 className="mt-1 line-clamp-2 break-words text-[17px]/6 font-semibold tracking-[-.4px] text-[#17172B]">{place.name}</h2>
+                        {category !== '전체' && <p className="mt-1 text-xs text-[#717586]">{category}</p>}
+                        {visibleCardPrice(place.pricePreview, category) && <p className="mt-2 text-[13px] font-medium text-[#17172B]">{visibleCardPrice(place.pricePreview, category)}</p>}
                       </div>
-                    </button>
-                    <PlacePhotoCredit place={place} />
-                    <Link className="mx-3 mb-3 flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[#dfe4ed] bg-white px-2 py-2 text-center text-xs font-bold text-[#5147ff] no-underline hover:border-[#c6c1ff] hover:bg-[#f6f5ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5147ff] min-[68.8125rem]:mx-4 min-[68.8125rem]:mb-4" aria-label={`${place.name} 상세 보기`} href={getPlaceDetailUrl(place.id, listUrl)} onClick={event => openPlaceDetail(event, place.id)}>
-                      상세 보기 <span aria-hidden="true">→</span>
                     </Link>
                   </article>
                 </li>
@@ -279,7 +290,7 @@ export default function PlaceExplorer() {
         </section>
 
         <aside aria-label="장소 지도" className={`relative max-md:h-[75dvh] max-md:min-h-[560px] md:border-l md:border-l-[#e5e9ef] ${!mobileMap ? 'max-md:hidden' : ''}`}>
-          <KakaoPlaceMap places={locatedPlaces} totalPlaces={placeQuery.data?.totalElements} searchingArea={searchingArea} selection={selectedPlace ? selection : null} onSelect={togglePlaceSelection} onBoundsChange={changeMapBounds} view={mapView} hasSearchBounds={mapBounds !== null} />
+          <KakaoPlaceMap places={locatedPlaces} hoveredId={hoveredId} totalPlaces={placeQuery.data?.totalElements} searchingArea={searchingArea} selection={selectedPlace ? selection : null} onSelect={togglePlaceSelection} onBoundsChange={changeMapBounds} view={mapView} hasSearchBounds={mapBounds !== null} />
           {failed && mobileMap && (
             <div className={mapMessageClassName} role="alert">
               <p>지도에 표시할 장소를 불러오지 못했어요.</p>
@@ -287,15 +298,19 @@ export default function PlaceExplorer() {
             </div>
           )}
           {selectedPlace && (
-            <div className="absolute inset-x-4 bottom-20 z-[2] rounded-xl border border-[#e7eae7] bg-[#fffffff5] px-5 py-[18px] shadow-[0_5px_20px_#34553a15] md:bottom-10" aria-live="polite">
-              <span className="text-[10px] text-[#6156ff]">선택한 장소</span><h3 className="mt-[3px] text-[16px] font-bold">{selectedPlace.name}</h3>
+            <div className="absolute inset-x-4 bottom-24 z-[2] rounded-xl border border-[#e7eae7] bg-[#fffffff5] px-5 py-[18px] shadow-[0_5px_20px_#34553a15] md:bottom-10" aria-live="polite">
+              <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-slate-200 md:hidden"/><span className="text-[10px] text-[#6156ff]">선택한 장소</span><h3 className="mt-[3px] text-[16px] font-bold">{selectedPlace.name}</h3>
               <p className="mt-[5px] text-[11px]/[1.7] text-[#7d899a]">{selectedPlace.address ?? '주소 미확인'}</p>
               <Link className="mt-3 block border-t border-[#edf0f4] pt-2.5 text-[11px] text-[#5147ff] no-underline" href={getPlaceDetailUrl(selectedPlace.id, listUrl)} onClick={event => openPlaceDetail(event, selectedPlace.id)}>장소 상세 보기 →</Link>
             </div>
           )}
         </aside>
       </main>
-      <button type="button" className="fixed bottom-[22px] left-1/2 z-[5] -translate-x-1/2 cursor-pointer rounded-[30px] bg-[#16243b] px-6 py-[13px] text-[12px] whitespace-nowrap text-white shadow-[0_5px_20px_#16243b25] md:hidden" aria-pressed={mobileMap} onClick={() => setMobileMap(!mobileMap)}>{mobileMap ? '목록 보기' : '지도 보기'}</button>
+      <nav aria-label="모바일 탐색 메뉴" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-[#ececf2] bg-white/95 px-4 pb-[env(safe-area-inset-bottom)] text-[11px] backdrop-blur md:hidden [&>a]:flex [&>a]:min-h-16 [&>a]:flex-col [&>a]:items-center [&>a]:justify-center [&>a]:gap-1">
+        <Link href="/" className="text-[#717586]"><Home size={20} aria-hidden="true"/>홈</Link>
+        <button type="button" aria-pressed={mobileMap} onClick={() => setMobileMap(!mobileMap)} className="flex min-h-16 flex-col items-center justify-center gap-1 font-semibold text-[#5942FF]">{mobileMap ? <List size={20} aria-hidden="true"/> : <MapIcon size={20} aria-hidden="true"/>}{mobileMap ? '목록 보기' : '지도 보기'}</button>
+        <Link href="/mypage/favorites/" className="text-[#717586]"><Bookmark size={20} aria-hidden="true"/>관심 장소</Link>
+      </nav>
     </div>
   );
 }

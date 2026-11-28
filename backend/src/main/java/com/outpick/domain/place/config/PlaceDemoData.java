@@ -35,15 +35,18 @@ public class PlaceDemoData implements ApplicationRunner {
         var gangwon = save(Region.builder().code(MARKER).name("강원").build());
         var gyeonggi = save(Region.builder().code("OUTPICK-DEMO-GG").name("경기").build());
         Map<String, ActivityCategory> categories = new LinkedHashMap<>();
-        for (String name : new String[]{"수상", "산악", "항공", "스키·보드", "체험", "실내"}) {
-            categories.put(name, save(ActivityCategory.builder().name(name).build()));
+        for (String name : new String[]{"아이스스케이팅", "해수욕장", "스노클링", "워터파크",
+                "루지·레일바이크·중력 레이싱", "스키", "눈썰매"}) {
+            var existing = em.createQuery("select c from ActivityCategory c where c.name = :name", ActivityCategory.class)
+                    .setParameter("name", name).setMaxResults(1).getResultList();
+            categories.put(name, existing.isEmpty() ? save(ActivityCategory.builder().name(name).build()) : existing.getFirst());
         }
-        var ski = type(categories, "스키·보드", "스키");
-        var board = type(categories, "스키·보드", "스노보드");
-        var surf = type(categories, "수상", "서핑");
-        var zipline = type(categories, "체험", "짚라인");
-        var climb = type(categories, "실내", "클라이밍");
-        var kayak = type(categories, "수상", "카약");
+        var ski = type(categories, "스키", "스키");
+        var board = type(categories, "스키", "스노보드");
+        var surf = type(categories, "스노클링", "스노클링");
+        var zipline = type(categories, "루지·레일바이크·중력 레이싱", "루지");
+        var climb = type(categories, "아이스스케이팅", "아이스스케이팅");
+        var kayak = type(categories, "워터파크", "워터파크");
         var snow = place(gangwon, "눈마루 리조트", "평창군", "37.37", "128.39");
         activity(snow, ski, "OUTDOOR", "WINTER");
         activity(snow, board, "OUTDOOR", "WINTER");

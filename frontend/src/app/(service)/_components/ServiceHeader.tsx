@@ -11,7 +11,8 @@ const explorerHeaderClassName = `md:grid md:grid-cols-[minmax(0,1fr)_min(550px,4
   [&_:is(a,button,input):focus-visible]:outline-[#5147ff]`;
 
 export default function ServiceHeader() {
-  const isExplorer = usePathname() === '/';
+  const pathname = usePathname();
+  const isExplorer = pathname === '/explore' || pathname === '/explore/';
 
   return (
     <header className={`sticky top-0 z-30 flex flex-wrap items-center gap-3.5 bg-white px-5 py-5 md:flex-nowrap md:gap-5 md:px-6
@@ -21,7 +22,7 @@ export default function ServiceHeader() {
         <span className="font-['Malgun_Gothic',system-ui,sans-serif]">OUTPICK</span>
         <span className="hidden text-[10px] font-normal tracking-normal text-[#8793a7] min-[1101px]:inline">밖으로, 더 멀리</span>
       </Link>
-      {isExplorer && <Suspense><PlaceSearchForm /></Suspense>}
+      {isExplorer ? <Suspense><PlaceSearchForm /></Suspense> : <nav aria-label="주 메뉴" className="ml-auto flex gap-5 text-sm font-semibold"><Link href="/" className={pathname === '/' ? 'text-[#5942FF]' : ''}>홈</Link><Link href="/explore/">탐색</Link></nav>}
       <div className="col-start-3 ml-auto flex shrink-0 items-center gap-1 md:gap-2">
         <MemberProfileMenu />
       </div>

@@ -78,13 +78,13 @@ public class Member {
         updatedAt = LocalDateTime.now();
     }
 
-    public void revokeSessions() {
+    public void revokeLogins() {
         authVersion++;
     }
 
     public void changePassword(String encodedPassword) {
         passwordHash = encodedPassword;
-        revokeSessions();
+        revokeLogins();
     }
 
 }

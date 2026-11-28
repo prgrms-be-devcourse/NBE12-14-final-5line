@@ -1,7 +1,11 @@
 package com.outpick.domain.favorite;
 
 import com.jayway.jsonpath.JsonPath;
+import com.outpick.domain.member.AuthTestClient;
 import com.outpick.domain.place.entity.Place;
+import com.outpick.domain.place.entity.ActivityCategory;
+import com.outpick.domain.place.entity.ActivityType;
+import com.outpick.domain.place.entity.PlaceActivity;
 import com.outpick.domain.place.entity.PlacePublishStatus;
 import com.outpick.domain.place.entity.PlaceRepresentativeImage;
 import com.outpick.domain.place.entity.Region;
@@ -83,10 +87,10 @@ class FavoriteApiTests {
                 .andExpect(jsonPath("$.detail").value("이미 관심 장소에 저장된 장소입니다."));
         assertThat(jdbc.queryForMap("SELECT favorite_id, created_at FROM favorite WHERE place_id = ?", placeId))
                 .isEqualTo(saved);
-        mvc.perform(get(FAVORITES).session(first.session()))
+        mvc.perform(get(FAVORITES).cookie(first.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].id").value(placeId));
-        mvc.perform(get(FAVORITES).session(second.session()))
+        mvc.perform(get(FAVORITES).cookie(second.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
 
         mvc.perform(second.withCsrf(createFavorite(placeId))).andExpect(status().isCreated());
@@ -96,9 +100,9 @@ class FavoriteApiTests {
                 .andExpect(jsonPath("$.placeId").value(placeId))
                 .andExpect(jsonPath("$.message").value("관심 장소에서 해제했습니다."));
         mvc.perform(first.withCsrf(delete(FAVORITES + "/{placeId}", placeId))).andExpect(status().isOk());
-        mvc.perform(get(FAVORITES).session(first.session()))
+        mvc.perform(get(FAVORITES).cookie(first.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
-        mvc.perform(get(FAVORITES).session(second.session()))
+        mvc.perform(get(FAVORITES).cookie(second.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(placeId));
         mvc.perform(first.withCsrf(createFavorite(placeId))).andExpect(status().isCreated());
     }
@@ -110,12 +114,12 @@ class FavoriteApiTests {
         long placeId = createPlace();
 
         mvc.perform(get(FAVORITES)).andExpect(status().isUnauthorized());
-        mvc.perform(createFavorite(placeId).session(member.session()))
+        mvc.perform(createFavorite(placeId).cookie(member.cookies()))
                 .andExpect(status().isForbidden());
         mvc.perform(member.withCsrf(createFavorite(placeId))).andExpect(status().isCreated());
-        mvc.perform(delete(FAVORITES + "/{placeId}", placeId).session(member.session()))
+        mvc.perform(delete(FAVORITES + "/{placeId}", placeId).cookie(member.cookies()))
                 .andExpect(status().isForbidden());
-        mvc.perform(get(FAVORITES).session(member.session()))
+        mvc.perform(get(FAVORITES).cookie(member.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(placeId));
         mvc.perform(get("/api/v1/places/{placeId}", placeId))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.isNotified").doesNotHaveJsonPath());
@@ -147,12 +151,12 @@ class FavoriteApiTests {
         mvc.perform(member.withCsrf(createFavorite(Long.MAX_VALUE)))
                 .andExpect(status().isNotFound());
         mvc.perform(get("/api/v1/places/{placeId}", placeId)).andExpect(status().isNotFound());
-        mvc.perform(get(FAVORITES).session(member.session()))
+        mvc.perform(get(FAVORITES).cookie(member.cookies()))
                 .andExpect(status().isOk())
                 .andExpect(content().json("""
                         [{"id":%d,"name":"관심 장소","publishStatus":"HIDDEN"}]
                         """.formatted(placeId), JsonCompareMode.STRICT));
-        mvc.perform(get(FAVORITES).session(otherMember.session()))
+        mvc.perform(get(FAVORITES).cookie(otherMember.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
         assertThat(favoriteCount(placeId)).isEqualTo(1);
         mvc.perform(member.withCsrf(notificationSetting(placeId, false)))
@@ -161,7 +165,7 @@ class FavoriteApiTests {
 
         place.changePublishStatus(PlacePublishStatus.PUBLISHED);
         places.save(place);
-        mvc.perform(get(FAVORITES).session(member.session()))
+        mvc.perform(get(FAVORITES).cookie(member.cookies()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].publishStatus").value("PUBLISHED"))
                 .andExpect(jsonPath("$[0].isNotified").value(true))
@@ -175,7 +179,7 @@ class FavoriteApiTests {
 
         mvc.perform(member.withCsrf(delete(FAVORITES + "/{placeId}", placeId))).andExpect(status().isOk());
         assertThat(favoriteCount(placeId)).isZero();
-        mvc.perform(get(FAVORITES).session(member.session()))
+        mvc.perform(get(FAVORITES).cookie(member.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
     }
 
@@ -190,7 +194,7 @@ class FavoriteApiTests {
         place.changePublishStatus(PlacePublishStatus.DRAFT);
         places.save(place);
 
-        mvc.perform(get(FAVORITES).session(member.session()))
+        mvc.perform(get(FAVORITES).cookie(member.cookies()))
                 .andExpect(status().isOk()).andExpect(content().json("[]", JsonCompareMode.STRICT));
         assertThat(favoriteCount(placeId)).isEqualTo(1);
     }
@@ -231,7 +235,7 @@ class FavoriteApiTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.placeId").value(placeId))
                 .andExpect(jsonPath("$.isNotified").value(true));
-        mvc.perform(get(FAVORITES).session(first.session()))
+        mvc.perform(get(FAVORITES).cookie(first.cookies()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(latestPlaceId))
                 .andExpect(jsonPath("$[0].publishStatus").value("PUBLISHED"))
@@ -244,7 +248,7 @@ class FavoriteApiTests {
                 .andExpect(jsonPath("$[1].imageLicense").value(nullValue()))
                 .andExpect(jsonPath("$[1].place").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$[1].isNotified").value(true));
-        mvc.perform(get(FAVORITES).session(second.session()))
+        mvc.perform(get(FAVORITES).cookie(second.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].isNotified").value(false));
     }
 
@@ -270,7 +274,7 @@ class FavoriteApiTests {
 
         mvc.perform(member.withCsrf(delete(FAVORITES + "/{placeId}", placeId))).andExpect(status().isOk());
         mvc.perform(member.withCsrf(createFavorite(placeId))).andExpect(status().isCreated());
-        mvc.perform(get(FAVORITES).session(member.session()))
+        mvc.perform(get(FAVORITES).cookie(member.cookies()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].isNotified").value(false));
         assertThat(notificationEnabledAt(placeId)).isNull();
     }
@@ -281,13 +285,10 @@ class FavoriteApiTests {
         var member = login("invalid-notification@example.com");
         long placeId = createPlace();
         mvc.perform(member.withCsrf(createFavorite(placeId))).andExpect(status().isCreated());
-        var csrf = mvc.perform(get("/api/v1/auth/csrf")).andReturn();
-        String csrfBody = csrf.getResponse().getContentAsString();
-        var anonymous = new MemberSession((MockHttpSession) csrf.getRequest().getSession(false),
-                JsonPath.read(csrfBody, "$.headerName"), JsonPath.read(csrfBody, "$.token"));
+        var anonymous = AuthTestClient.create(mvc);
 
         mvc.perform(anonymous.withCsrf(notificationSetting(placeId, true))).andExpect(status().isUnauthorized());
-        mvc.perform(notificationSetting(placeId, true).session(member.session())).andExpect(status().isForbidden());
+        mvc.perform(notificationSetting(placeId, true).cookie(member.cookies())).andExpect(status().isForbidden());
         mvc.perform(member.withCsrf(notificationSetting(0, true))).andExpect(status().isBadRequest());
         for (String body : List.of("{}", "{\"isNotified\":null}", "{\"isNotified\":\"true\"}", "{\"isNotified\":1}")) {
             mvc.perform(member.withCsrf(patch(NOTIFICATION_SETTINGS, placeId))
@@ -313,12 +314,12 @@ class FavoriteApiTests {
             assertThat(on.get(10, TimeUnit.SECONDS)).isEqualTo(200);
             assertThat(off.get(10, TimeUnit.SECONDS)).isEqualTo(200);
         }
-        var result = mvc.perform(get(FAVORITES).session(member.session())).andExpect(status().isOk()).andReturn();
+        var result = mvc.perform(get(FAVORITES).cookie(member.cookies())).andExpect(status().isOk()).andReturn();
         boolean enabled = JsonPath.read(result.getResponse().getContentAsString(), "$[0].isNotified");
         assertThat(notificationEnabledAt(placeId) != null).isEqualTo(enabled);
     }
 
-    private int updateTogether(MemberSession member, long placeId, boolean enabled,
+    private int updateTogether(AuthTestClient member, long placeId, boolean enabled,
                                CountDownLatch ready, CountDownLatch start) throws Exception {
         ready.countDown();
         assertThat(start.await(5, TimeUnit.SECONDS)).isTrue();
@@ -334,7 +335,7 @@ class FavoriteApiTests {
         return jdbc.queryForObject("SELECT notified_enabled_at FROM favorite WHERE place_id = ?", LocalDateTime.class, placeId);
     }
 
-    private int saveTogether(MemberSession member, long placeId, CountDownLatch ready, CountDownLatch start)
+    private int saveTogether(AuthTestClient member, long placeId, CountDownLatch ready, CountDownLatch start)
             throws Exception {
         ready.countDown();
         assertThat(start.await(5, TimeUnit.SECONDS)).isTrue();
@@ -366,6 +367,11 @@ class FavoriteApiTests {
             var place = Place.builder().region(region).name("관심 장소")
                     .publishStatus(PlacePublishStatus.PUBLISHED).build();
             entityManager.persist(place);
+            var category = ActivityCategory.builder().name("스키").build();
+            entityManager.persist(category);
+            var type = ActivityType.builder().category(category).name("스키").build();
+            entityManager.persist(type);
+            entityManager.persist(PlaceActivity.builder().place(place).activityType(type).environmentType("OUTDOOR").build());
             return place.getId();
         });
     }
@@ -374,28 +380,10 @@ class FavoriteApiTests {
         return jdbc.queryForObject("SELECT COUNT(*) FROM favorite WHERE place_id = ?", Integer.class, placeId);
     }
 
-    private MemberSession login(String email) throws Exception {
-        var result = mvc.perform(get("/api/v1/auth/csrf")).andExpect(status().isOk()).andReturn();
-        var session = (MockHttpSession) result.getRequest().getSession(false);
-        String csrfResponse = result.getResponse().getContentAsString();
-        var member = new MemberSession(session, JsonPath.read(csrfResponse, "$.headerName"),
-                JsonPath.read(csrfResponse, "$.token"));
-        mvc.perform(member.withCsrf(post("/api/v1/auth/signup")).contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"%s","password":"password123","nickname":"관심 장소 회원"}
-                                """.formatted(email)))
-                .andExpect(status().isCreated());
-        mvc.perform(member.withCsrf(post("/api/v1/auth/login")).contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"%s","password":"password123"}
-                                """.formatted(email)))
-                .andExpect(status().isOk());
+    private AuthTestClient login(String email) throws Exception {
+        var member = AuthTestClient.create(mvc);
+        member.signup(email, "password123", "관심 장소 회원");
+        member.login(email, "password123");
         return member;
-    }
-
-    private record MemberSession(MockHttpSession session, String headerName, String token) {
-        MockHttpServletRequestBuilder withCsrf(MockHttpServletRequestBuilder request) {
-            return request.session(session).header(headerName, token);
-        }
     }
 }
